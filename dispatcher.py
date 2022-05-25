@@ -5,10 +5,65 @@ import argparse
 import itertools
 import time
 import numpy as np
+import os
 
 
-max_load = 2
-base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
+my_str_orig = '''
+#!/bin/bash
+#BSUB -J m2m
+#BSUB -o m2m.out
+#BSUB -e m2m.err
+
+# This is a sample script with specific resource requirements for the
+# **bigmemory** queue with 64GB memory requirement and memory
+# limit settings, which are both needed for reservations of
+# more than 40GB.
+# Copy this script and then submit job as follows:
+# ---
+# cd ~/lsf
+# cp templates/bsub/example_8CPU_bigmulti_64GB.lsf .
+# bsub < example_bigmulti_8CPU_64GB.lsf
+# ---
+# Then look in the ~/lsf/output folder for the script log
+# that matches the job ID number
+
+# Please make a copy of this script for your own modifications
+
+#BSUB -q gpu
+
+# Some important variables to check (Can be removed later)
+echo '---PROCESS RESOURCE LIMITS---'
+ulimit -a
+echo '---SHARED LIBRARY PATH---'
+echo $LD_LIBRARY_PATH
+echo '---APPLICATION SEARCH PATH:---'
+echo $PATH
+echo '---LSF Parameters:---'
+printenv | grep '^LSF'
+echo '---LSB Parameters:---'
+printenv | grep '^LSB'
+echo '---LOADED MODULES:---'
+module list
+echo '---SHELL:---'
+echo $SHELL
+echo '---HOSTNAME:---'
+hostname
+echo '---GROUP MEMBERSHIP (files are created in the first group listed):---'
+groups
+echo '---DEFAULT FILE PERMISSIONS (UMASK):---'
+umask
+echo '---CURRENT WORKING DIRECTORY:---'
+pwd
+echo '---DISK SPACE QUOTA---'
+df .
+echo '---TEMPORARY SCRATCH FOLDER ($TMPDIR):---'
+echo $TMPDIR
+
+# Add your job command here
+# source activate dispatcher
+# module load Anaconda3/5.2.0
+cd /PHShome/jjd65/m2m
+'''
 parser = argparse.ArgumentParser()
 parser.add_argument("-case", "--case", help="case", type=str)
 args = parser.parse_args()
@@ -72,28 +127,17 @@ for p in zipped_params:
         my_str = my_str + ' -case ' + 'yfile_' + p[-1].split('.')[0].replace('-','_')
     elif args.case is not None:
         my_str = my_str + ' -case ' + args.case
-    cmd = my_str
-    print(cmd)
-    args2 = cmd.split(' ')
+    # cmd = my_str
+    f = open('m2m.lsf', 'w')
+    f.write(my_str_orig, my_str)
+    f.close()
+    os.system('bsub < {}'.format('m2m.lsf'))
+    # print(cmd)
+    # args2 = cmd.split(' ')
     outter_i += 1
-    pid = subprocess.Popen(args2, cwd = base_path)
-    pid_list.append(pid)
-    time.sleep(0.5)
-    while sum([x.poll() is None for x in pid_list]) >= max_load:
-        time.sleep(1)
+    # pid = subprocess.Popen(args2, cwd = base_path)
+    # pid_list.append(pid)
+    # time.sleep(0.5)
+    # while sum([x.poll() is None for x in pid_list]) >= max_load:
+    #     time.sleep(1)
 
-
-# for seed in np.arange(5):
-#     for learn, priors in list(zip(*[learn_list, learn_list])):
-#         for lr in np.logspace(-1,-5,5):
-#             # for local in [1, 5]:
-#             # for priors in ['all', 'none']:
-#             cmd = my_str.format(N_met, N_bug, local, L, K, meas_var, prior_meas_var, seed,
-#                                 ' '.join(learn), ' '.join(priors), learn_num_clusters)
-#             print(cmd)
-#             args2 = cmd.split(' ')
-#             pid = subprocess.Popen(args2)
-#             pid_list.append(pid)
-#             time.sleep(0.5)
-#             while sum([x.poll() is None for x in pid_list]) >= max_load:
-#                 time.sleep(30)

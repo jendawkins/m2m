@@ -117,7 +117,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         fig.tight_layout()
         fig.savefig(path + 'embedded_locations.png')
         plt.close(fig)
-    fig2.tight_layout()
+    # fig2.tight_layout()
     fig2.savefig(path + 'cluster_histogram.png')
     plt.close(fig2)
 

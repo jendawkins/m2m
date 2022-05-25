@@ -188,21 +188,21 @@ if __name__ == "__main__":
     meas_var = 0.001
     if not os.path.isdir(orig_path + 'mvar_' + str(meas_var).replace('.','-')):
         os.mkdir(orig_path + 'mvar_' + str(meas_var).replace('.','-'))
-    for cluster_std in [1,3,6,10,12,100]:
-        x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
-        mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
-            N_met=N_met, N_bug=N_bug, N_met_clusters=K,
-            N_bug_clusters=L, meas_var=meas_var,
-            repeat_clusters=2, N_samples=48, linear=1,
-            nl_type='linear', dist_var_frac=2, cluster_std=cluster_std)
+    # for cluster_std in [1,3,6,10,12,100]:
+    x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+    mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
+        N_met=N_met, N_bug=N_bug, N_met_clusters=1,
+        N_bug_clusters=L, meas_var=meas_var,
+        repeat_clusters=2, N_samples=48, linear=1,
+        nl_type='linear', dist_var_frac=2, cluster_std=cluster_std)
 
-        plt.figure()
-        for c_ix in np.arange(gen_z.shape[1]):
-            y_ix = np.where(np.argmax(gen_z, 1)==c_ix)[0]
-            plt.hist(y[:, y_ix].flatten(), bins = 10, label = 'Cluster ' + str(c_ix))
-        plt.legend()
-        plt.title('Cluster STD: ' + str(cluster_std))
-        plt.show()
+    # plt.figure()
+    # for c_ix in np.arange(gen_z.shape[1]):
+    #     y_ix = np.where(np.argmax(gen_z, 1)==c_ix)[0]
+    #     plt.hist(y[:, y_ix].flatten(), bins = 10, label = 'Cluster ' + str(c_ix))
+    # plt.legend()
+    # plt.title('Cluster STD: ' + str(cluster_std))
+    # plt.show()
 
     plot_syn_data(orig_path + 'mvar_' + str(meas_var).replace('.','-') + '/' +
                   str(cluster_std), x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,

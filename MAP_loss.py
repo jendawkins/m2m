@@ -87,7 +87,7 @@ class MAPloss():
                 self.net.alpha_act).sum().sum()
         if self.net.learn_num_bug_clusters:
             L_active = self.net.alpha_act.sum(0)
-            nb = -NegativeBinomial(self.net.L, torch.exp(self.net.p)).log_prob(L_active).sum()
+            nb = -NegativeBinomial(self.net.L, 0.1).log_prob(L_active).sum()
             self.loss_dict['alpha'] += nb
 
     def beta_loss(self):

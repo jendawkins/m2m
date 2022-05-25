@@ -156,7 +156,7 @@ def concrete_sampler(a, T, dim, loc = 0, scale = 1):
 def get_epsilon(data):
     vals = np.array(data).flatten()
     vals[np.where(vals == 0)[0]] = np.max(vals)
-    epsilon = np.min(np.abs(vals))
+    epsilon = 0.1*np.min(np.abs(vals))
     return epsilon
 
 def filter_by_train_set(x_train, x_test, meas_key, key = 'metabs', log_transform = True, standardize_data = True):

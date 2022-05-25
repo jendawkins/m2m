@@ -110,7 +110,6 @@ class Model(nn.Module):
         self.p_nn = p_nn
         # number of microbe and metabolite clusters
         self.L, self.K = L, K
-        self.L_sm, self.K_sm = L, K # L_sm and K_sm are the estimated number of clusters if we learn the number of clusters
 
         # If we learn the number of microbe/metabolite clusters and met_class is not None and bug_class is not None,
         # set the number of metabolomic clusters to the number of unique metabolite classes and the number of microbes
@@ -120,27 +119,34 @@ class Model(nn.Module):
             self.K = len(np.unique(self.met_class.values))
         if self.learn_num_bug_clusters:
             self.L = len(np.unique(self.bug_class.values))
-
-        # define the NAM model if not linear
-        if not self.linear:
-            self.NAM = nn.ModuleList([nn.ModuleList([nn.ModuleList([nn.Sequential(
-                nn.Linear(1, 32, bias = True),
-                nn.ELU(),
-                nn.Linear(32, 32, bias = True),
-                nn.ELU(),
-                nn.Linear(32, 16, bias = True),
-                nn.ELU(),
-                nn.Linear(16,1, bias = True)
-            ) for p in np.arange(self.p_nn)]) for l in np.arange(self.L)]) for k in np.arange(self.K)])
-
         # the location parameter for the binaryConcrete distribution on alpha
         self.alpha_loc = 1 / (self.L * self.K)
 
-        # Define the range of metabolites and microbes
-        # Set the prior distributions parameters for each model parameter
+        # define the NAM model if not linear
+        # This NAM is a set of neural networks for each metab-microbe cluster interaction. Each neural network has
+        # 2 hidden layers with 32 nodes in the first layer and 16 nodes in the second layer
+        if not self.linear:
+            self.NAM = nn.ModuleList([nn.ModuleList([nn.ModuleList([nn.Sequential(
+                nn.Linear(1, 16, bias = True),
+                nn.ELU(),
+                nn.Linear(16, 16, bias = True),
+                nn.ELU(),
+                nn.Linear(16, 8, bias = True),
+                nn.ELU(),
+                nn.Linear(8,1, bias = True)
+            ) for p in np.arange(self.p_nn)]) for l in np.arange(self.L)]) for k in np.arange(self.K)])
+
+
+        # Set the prior distributions parameters for each model parameter (to be called in MAP_loss.py when we find the
+        # loss of each parameter according to its prior)
+        # self.params is a dictionary of hyperparameters for each model parameter
         self.params = {}
+        # self.distributions is a dictionary of each parameter's prior distribution
         self.distributions = {}
+        # If we have metabolite locations, we set a prior distribution for r_met and mu_met
         if self.met_locs is not None:
+            # If we have metabolite categories (from taxonomy or elsewhere), we set the prior for r_met to be centered
+            # around the average embedded size of the given metabolite categories
             if self.met_class is not None:
                 radii = []
                 means = []
@@ -153,21 +159,26 @@ class Model(nn.Module):
                     means.append(np.mean(locs,0))
                     locss.append(locs)
                     gps.append(bc)
-                scale = 10*np.var(radii)
                 loc = np.mean(radii)
+            # Otheriwse, we set r_met to be the size of the embedding space divided by K
             else:
                 scale = np.sqrt(np.sum((np.max(self.met_locs,0) - np.min(self.met_locs,0))**2))
                 loc = scale / self.K
+            # r_met is parameterized by a scale-inv-chi-squared distribution with DOF = 0.1 and tau^{2} = loc
+            # We re-parameterize to be able to use a Gamma dist since pytorch doesn't have an inv-gamma or inv-chi-squared
             v = 0.1
             tau2 = loc
             self.params['r_met'] = {'loc': loc, 'scale': (tau2*v)/2, 'dof': v/2}
             self.distributions['r_met'] = Gamma(rate=self.params['r_met']['scale'],
                                                       concentration=self.params['r_met']['dof'])
-            # if self.met_c
+            # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
+            # locations are already scaled to have variance 1)
             self.params['mu_met'] = {'mean': 0, 'var': 100}
             self.distributions['mu_met'] = MultivariateNormal(torch.zeros(self.met_embedding_dim),
                                                               (self.params['mu_met']['var']) * torch.eye(
                                                                   self.met_embedding_dim))
+
+        # If we have input microbial locations, we do the same procedure as for input metabolic locations described above
         if self.microbe_locs is not None:
             if self.bug_class is not None:
                 radii = []
@@ -181,7 +192,6 @@ class Model(nn.Module):
                     means.append(np.mean(locs,0))
                     locss.append(locs)
                     gps.append(bc)
-                scale = 10*np.var(radii)
                 loc = np.mean(radii)
             else:
                 scale = np.sqrt(np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2))
@@ -193,31 +203,53 @@ class Model(nn.Module):
                                                       concentration=self.params['r_bug']['dof'])
             self.params['mu_bug'] = {'mean': 0, 'var': 100}
             self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim), (self.params['mu_bug']['var'])*torch.eye(self.bug_embedding_dim))
+
+        # If we don't have input microbial or metabolic locations, we need to learn omega/w, so we need to set a prior for w
         else:
+            # We set a binary concrete prior with location = 0.1 and tau = self.omega_temp (as a reminder, this
+            # parameter decreases throughout learning and is reset each epoch in run_learner() below)
             self.w_loc = (0.1*self.N_bug)/self.N_bug
             self.params['w'] = {'loc': self.w_loc, 'temp': self.omega_temp}
             self.distributions['w'] = BinaryConcrete(self.params['w']['loc'], self.omega_temp)
+        # beta is parameterized by a normal dist with mean=0, var = 1000
         self.params['beta'] = {'mean': 0, 'scale': np.sqrt(1000)}
+        self.distributions['beta'] = Normal(self.params['beta']['mean'], self.params['beta']['scale'])
+        # alpha is parameterized by a binary concrete with loc=1/(K*L) (defined above) and self.alpha_temp, which
+        # decreases throughout learning like self.omega_temp
         self.params['alpha'] = {'loc': self.alpha_loc, 'temp':self.alpha_temp}
+        self.distributions['alpha'] = BinaryConcrete(self.params['alpha']['loc'], self.params['alpha']['temp'])
+        # e_met is only learned (and thus the prior only used) if we are learning the number of metabolite clusters;
+        # we set dof=10 and scale = 10*K according to the recommendations in Malsiner-Walli et al
         self.params['e_met'] = {'dof': 10, 'scale': 10*self.K} # based on Malsiner-Walli
-        self.params['pi_met'] = {'epsilon': [1/self.K]*self.K} # look into why this is 2
+        self.distributions['e_met'] = Gamma(self.params['e_met']['dof'], self.params['e_met']['scale'])
+        # pi_met is set to a dirichlet prior with epsilon = 1/K; if we learn the number of metabolite clusters,
+        # we use epsilon=e_met instead of epsilon=1/K
+        self.params['pi_met'] = {'epsilon': [1/self.K]*self.K}
+        self.distributions['pi_met'] = Dirichlet(torch.Tensor(self.params['pi_met']['epsilon']))
         tau2 = data_meas_var
         v = 0.1
         self.params['sigma'] = {'scale': (tau2 * v) / 2, 'dof': v/2}
+        self.distributions['sigma'] = Gamma(rate=self.params['sigma']['scale'],
+                                            concentration=self.params['sigma']['dof'])
 
-        # define the prior distributions for each model parameter
-        self.distributions['beta'] = Normal(self.params['beta']['mean'], self.params['beta']['scale'])
-        self.distributions['alpha'] = BinaryConcrete(self.params['alpha']['loc'], self.params['alpha']['temp'])
-        self.distributions['pi_met'] = Dirichlet(torch.Tensor(self.params['pi_met']['epsilon']))
-        self.distributions['e_met'] = Gamma(self.params['e_met']['dof'], self.params['e_met']['scale'])
-        self.distributions['sigma'] = Gamma(rate = self.params['sigma']['scale'], concentration = self.params['sigma']['dof'])
-
-        # For each model parameter, sample from the prior to get the parameter range, for setting the learning rate
-        # Also, get the expected range of the parameter for plotting purposes
-        self.range_dict = {}
-        self.lr_range = {}
+        # For each model parameter, sample from the prior to get the parameter range, for adjusting the learning rate
+        # based on parameter size
+        # Also, get the expected range of the parameter for plotting purposes (the expected parameter range is use when
+        # plotting parameter traces that are nicer and easier to interpret / compare between different model runs)
+        self.range_dict = {} # stores ranges for plotting purposes
+        self.lr_range = {} # stores ranges for adjusting the learning rate based on parameter size
         for param, dist in self.distributions.items():
             sampler = dist.sample([1000])
+            # To find the expected range of each parameter, I sample from the prior. However, all of the parameters that
+            # have priors with bounded support (i.e. sigma, r_met, r_bug, w, z, alpha, pi_met, and e_met)
+            # have to be transformed to be learned in an unconstrained form.
+            # The learning rates should be set based on the size of the unconstrained parameter (self.lr_range), while the
+            # ranges for plotting are based on the constrained parameter (for increased interpretability of the parameter
+            # trace plots)
+
+            # Sigma, r_met, and r_bug are even more special because they are parameterized by an inverse Gamma, but
+            # pytorch only has a Gamma distribution. To get the expected size of the un-constrained and learned parameter,
+            # we sample from the Gamma dist but then take the log of the inverse
             if 'sigma' in param or 'r_met' in param or 'r_bug' in param:
                 vals = np.log(1/self.distributions[param].sample([1000]))
                 self.range_dict[param] = (-0.1, np.exp(vals.max()))
@@ -225,7 +257,7 @@ class Model(nn.Module):
             elif 'w' in param or 'z' in param or 'alpha' in param:
                 self.range_dict[param] = (-0.1,1.1)
                 self.lr_range[param] = np.abs(2*(torch.log(torch.tensor(self.params[param]['loc']).float())/self.params[param]['temp']))
-            elif param == 'pi_met' or param == 'p' or param == 'lambda_mu' or param == 'e_met':
+            elif param == 'pi_met' or param == 'e_met':
                 vals = torch.log(sampler)
                 self.lr_range[param] = torch.abs((torch.mean(vals) + torch.std(vals)) - (torch.mean(vals) - torch.std(vals)))
                 range = sampler.max() - sampler.min()
@@ -240,12 +272,13 @@ class Model(nn.Module):
         self.range_dict['z'] = (-0.1,1.1)
 
 
+    # Initialize parameter values
     def initialize(self, seed):
         torch.manual_seed(seed)
         np.random.seed(seed)
         self.seed = seed
-        # p is just the parameter for the negative binomial on the number of microbial clusters, if we learn the number of microbial clusters
-        self.p = torch.log(torch.tensor(0.1).float())
+        # self.sigma is the measurement variance, initialized to be the log of the measurement variance (since we will
+        # transform it to exp(self.sigma))
         self.sigma = nn.Parameter(torch.log(torch.tensor(self.params['sigma']['scale']).float()), requires_grad=True) # measurement variance
         if self.linear:
             # regression weights beta
@@ -439,14 +472,18 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     if x is None and y is None:
         x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
         mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
-            N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K,
+            N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = 1,
             N_bug_clusters = args.L,meas_var = args.meas_var,
             repeat_clusters= args.rep_clust, N_samples=args.N_samples, linear = args.linear,
             nl_type = args.nltype, dist_var_frac=args.dist_var_perc, embedding_dim=args.dim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
-        plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
-                      r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
+        try:
+            plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+                          r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
+        except:
+            print('no plots of gen data')
+
         if ylocs is None:
             a_met = None
         else:
@@ -629,7 +666,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             else:
                 net.alpha_temp = alpha_tau_logspace[0]
                 net.omega_temp = omega_tau_logspace[0]
-            if args.iterations < start:
+            if args.iterations-1 <= start:
                 print('training complete')
                 sys.exit()
             print('model loaded')
@@ -756,6 +793,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     pd.DataFrame(param_dict[args.seed]['w'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'omega.csv')
 
                 if not args.syn:
+                    met_newick_name = 'newick_' + args.yfile.split('.csv')[0] + '.nhx'
                     active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
                         set(np.where(np.sum(best_alpha,1)!= 0)[0])))
                     active_met_clust = np.where(np.sum(best_z,0) != 0)[0]
@@ -780,7 +818,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                             met_ix = [str(a) for a in met_ix]
                         inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree.pdf',
                              "-out", path+ 'seed' + str(args.seed) + '-clusters/',
-                                  "-newick", base_path + '/ete_tree/w1_newick_tree.nhx',"-feat"]
+                                  "-newick", base_path + '/ete_tree/' + met_newick_name,"-feat"]
                         inputs.extend(met_ix)
                         subprocess.run(inputs,cwd=base_path + "/ete_tree")
 
@@ -807,7 +845,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 except:
                     print('no loss dict')
                 plot_xvy(path, x, train_out_vec, best_mod, param_dict, args.seed)
-                if plot_params:
+                if plot_params and args.load == 0:
                     plot_param_traces(path, param_dict[args.seed], params2learn, true_vals, net, args.seed)
                 fig3, ax3 = plt.subplots(figsize=(8, 8))
                 fig3, ax3 = plot_loss(fig3, ax3, args.seed, np.arange(len(loss_vec)), loss_vec, lowest_loss=None)
@@ -855,7 +893,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-learn", "--learn", help="params to learn", type=str, nargs='+', default = 'all')
     parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.1)
-    parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+', default = "sigma")
+    parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+', default = 'all')
     parser.add_argument("-priors", "--priors", help="priors to set", type=str, nargs='+', default = '')
     parser.add_argument("-case", "--case", help="case", type=str, default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
     # parser.add_argument("-case", "--case", help="case", type=str,
@@ -867,13 +905,13 @@ if __name__ == "__main__":
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.001)
     parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 1001)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
-    parser.add_argument("-load", "--load", help="0 to not load model, 1 to load model", type=int, default = 0)
+    parser.add_argument("-load", "--load", help="0 to not load model, 1 to load model", type=int, default = 1)
     parser.add_argument("-rep_clust", "--rep_clust", help = "whether or not bugs are in more than one cluster", default = 0, type = int)
     parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 0)
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
     parser.add_argument("-hard", "--hard", help="whether or not to sample alpha and omega in the forward pass", type=int, default=0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 0)
+    parser.add_argument("-linear", "--linear", type = int, default = 1)
     parser.add_argument("-nltype", "--nltype", type = str, default = "exp")
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1)
     parser.add_argument("-l1", "--l1", type=int, default=0)
@@ -887,7 +925,7 @@ if __name__ == "__main__":
     parser.add_argument("-dtype", "--dtype", type=str, default='')
     parser.add_argument("-dim", "--dim", type=float, default=2)
     parser.add_argument("-syn", "--syn", type=int, default=0)
-    parser.add_argument("-yfile", "--yfile", type=str, default='y.csv')
+    parser.add_argument("-yfile", "--yfile", type=str, default='y_lt-one-stand.csv')
     parser.add_argument("-gmm", "--gmm", type=int, default=0)
     args = parser.parse_args()
     print(sys.executable)
@@ -904,7 +942,7 @@ if __name__ == "__main__":
         yfile = args.yfile
         xdist_file = 'x_dist.csv'
         ydist_file = 'y' + dtype + '_dist.csv'
-        met_newick_name = 'w1_newick_tree.nhx'
+        met_newick_name = 'newick_' + args.yfile.split('.csv')[0] + '.nhx'
 
         # set data_path to point to directory with data
         data_path = base_path + "/inputs"
@@ -913,6 +951,11 @@ if __name__ == "__main__":
             load_data(base_path, xfile, yfile, dataLoader)
         x = pd.read_csv(data_path + '/' + xfile, index_col = [0])
         y = pd.read_csv(data_path + '/' + yfile, index_col = [0])
+        y = y.loc[x.index.values]
+
+        args.N_met = y.shape[1]
+        args.N_bug = x.shape[1]
+        args.N_samples = y.shape[0]
 
         corr, p = st.spearmanr(y)
         corr_dist = (1 + corr)/2
@@ -931,16 +974,17 @@ if __name__ == "__main__":
 
         print(x.shape)
         print(y.shape)
+        make_tree(x.columns.values, base_path, args.case, 'asv',
+                  newick_path='/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx')
+        make_tree(y.columns.values, base_path, args.case, 'metab_orig', newick_path='/ete_tree/' + met_newick_name,
+                  dist_type=dtype)
 
         if args.locs == 'true':
-            make_tree(x.columns.values, base_path, args.case, 'asv', newick_path = '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx')
             if xdist_file not in os.listdir(base_path + '/inputs/'):
                 make_dist_mat(x, xdist_file, base_path, newick_path = '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx')
             xdist = pd.read_csv(base_path + '/inputs/' + xdist_file, header=0, index_col=0)
             xdist = xdist / np.max(np.max(xdist))
 
-            y = y.loc[x.index.values]
-            make_tree(y.columns.values, base_path, args.case, 'metab_orig', newick_path='/ete_tree/' + met_newick_name, dist_type = dtype)
             if ydist_file not in os.listdir(base_path + '/inputs/'):
                 make_dist_mat(y, ydist_file, base_path, newick_path = '/ete_tree/' + met_newick_name)
             ydist = pd.read_csv(base_path + '/inputs/' + ydist_file, header = 0, index_col = 0)
