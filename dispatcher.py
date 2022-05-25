@@ -72,15 +72,15 @@ args = parser.parse_args()
 param_dict = {('L', 'K'): [(10,10)], 'seed': [0,1,2],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
-              'iter': 10000,
+              'iter': 60000,
               'w_tau': [(-0.3, -3)],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
               # 'N_met': 153, 'N_bug': 97,
               # 'N_samples': 48,
               'lr': [0.1,0.01,0.001], 'meas_var': 0.0001,
               'syn': 0,
-              'load': 0, 'linear': 0, 'hard': [0],
-              'lm': [0], 'lb': [0], 'adjust_lr': [1], 'locs': ['none'],
+              'load': 0, 'linear': 0, 'hard': [0,1],
+              'lm': [0,1], 'lb': [0,1], 'adjust_lr': [1], 'locs': ['none'],
               'yfile': ['y_lt-one-stand.csv']
               }
 
