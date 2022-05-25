@@ -1,0 +1,24 @@
+name: M2M_CodeBase
+channels:
+  - soumith
+  - defaults
+dependencies:
+  - python=3.8
+  - pytorch
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - statsmodels
+  - certifi
+  - ca-certificates
+  - cycler
+  - libwebp-base==1.2.2
+  - pycparser==2.21
+  - readline==8.1.2
+  - sqlite==3.38.2
+  - wheel==0.37.1
+  - typing-extensions==4.1.1
+  - scikit-bio
+  - seaborn
+  - fitter
+prefix: /Users/jendawk/miniconda3/envs/M2M_CodeBase
