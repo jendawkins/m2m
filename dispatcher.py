@@ -130,7 +130,7 @@ for p in zipped_params:
         my_str = my_str + ' -case ' + args.case
     # cmd = my_str
     f = open('m2m.lsf', 'w')
-    f.write(my_str_orig, my_str)
+    f.write(my_str_orig + my_str)
     f.close()
     os.system('bsub < {}'.format('m2m.lsf'))
     # print(cmd)
