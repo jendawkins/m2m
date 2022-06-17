@@ -135,9 +135,10 @@ if __name__ == "__main__":
     parser.add_argument("-fingerprint", "--fingerprint", help = 'fingerprint method', type = str, default = 'pubchem')
     parser.add_argument("-metric", "--metric", help='fingerprint metric', type=str, default = 'dice')
     parser.add_argument("-smiles_type", "--smiles_type", help='smiles type', type=str, default='isomeric')
+    parser.add_argument("-yfile", "--yfile", type = str)
     args = parser.parse_args()
 
-    sm = pd.read_csv(base_path + 'inputs/y.csv')
+    sm = pd.read_csv(base_path + 'inputs/' + args.yfile)
     mets_keep = sm.columns.values
 
     if not os.path.isdir(base_path + '/inputs/' + args.fingerprint):

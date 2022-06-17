@@ -70,33 +70,29 @@ class dataLoader():
             #     value['data'] = value['data'].drop('Heptanoate', axis = 1)
             # else:
             filter = True
-            value['filtered_data'], value['reps'] = self.filter_transform(value['data'], targets_by_pt = None, key = key, filter = filter)
+            value['filtered_data'] = self.filter_transform(value['data'], targets_by_pt = None, key = key, filter = filter)
             # temp = self.get_week_x(value['filtered_data'], value['targets_by_pt'], week=1)
             #
             # self.week_one[key] = temp['x'], temp['y']
             temp_filt = filter_by_pt(value['data'], targets=None, perc=self.pt_perc, pt_thresh=self.pt_tmpts,
                                      meas_thresh=self.meas_thresh)
+
             for week in [0,1,2,3]:
                 reps = None
                 self.week[key][week] = self.get_week_x_step_ahead(value['filtered_data'], value['targets_by_pt'], week = week)
-                if value['reps'] is not None:
-                    self.week[key][week]['reps'] = value['reps'][self.week[key][week]['x'].columns.values]
                 self.week_raw[key][week] = self.get_week_x_step_ahead(value['data'], value['targets_by_pt'], week=week)
                 self.week_filt[key][week] = self.get_week_x_step_ahead(temp_filt, value['targets_by_pt'], week=week)
+                self.week_filt[key][week]['x'] = self.week_filt[key][week]['x'][self.week[key][week]['x'].columns.values]
 
                 temp = self.get_week_x_step_ahead(value['data'], value['targets_by_pt'], week = week)
-                x, reps = self.filter_transform(temp['x'], targets_by_pt=None,key=key, filter=filter, weeks = [week])
-                if value['reps'] is not None:
-                    reps = value['reps'][x.columns.values]
-                self.week_sm[key][week] = {'x': x, 'y': temp['y'], 'reps': reps}
+                x = self.filter_transform(temp['x'], targets_by_pt=None,key=key, filter=filter, weeks = [week])
+                self.week_sm[key][week] = {'x': x, 'y': temp['y']}
 
                 x = filter_by_pt(temp['x'], perc=self.pt_perc, targets = None,
                                                              pt_thresh = self.pt_tmpts, meas_thresh=self.meas_thresh,
                                                                   weeks = [week])
                 x = x[self.week_sm[key][week]['x'].columns.values]
-                if value['reps'] is not None:
-                    reps = value['reps'][x.columns.values]
-                self.week_sm_filt[key][week] = {'x': x,'y': temp['y'], 'reps': reps}
+                self.week_sm_filt[key][week] = {'x': x,'y': temp['y']}
 
         for ck in self.combos:
             self.week[ck] = {}
@@ -173,13 +169,10 @@ class dataLoader():
             # print(key + ', 1st filter: ' + str(filt1.shape))
         else:
             filt1 = data
-        replicate_ixs = [d for d in data.index.values if not d.split('-')[1].split('.')[-1].isnumeric()]
-        dat_rep = data.loc[replicate_ixs]
         epsilon = get_epsilon(filt1)
 
         if '16s' not in key:
             transformed = np.log(filt1 + epsilon)
-            trans_rep = np.log(dat_rep + epsilon)
         else:
             data_prop = np.divide(filt1.T, np.sum(filt1, 1)).T
             epsilon = get_epsilon(data_prop)
@@ -191,21 +184,15 @@ class dataLoader():
             trans_rep = None
         if filter and 'toxin' not in key:
             filt2 = filter_vars(transformed, perc=self.var_perc)
-            reps = trans_rep
         else:
             filt2 = transformed
-            reps = dat_rep
 
         stand, mean, dem = standardize(filt2, override=True)
-        if trans_rep is not None and 0 not in reps.shape:
-            stand_rep = (reps - mean)/dem
-        else:
-            stand_rep = None
         # print(key + ', 2nd filter: ' + str(filt2.shape))
         # print(key)
         # print(filt1.shape)
         # print(filt2.shape)
-        return stand, stand_rep
+        return stand
 
 
     def get_week_x(self, data, targets, week = 1):
@@ -266,6 +253,13 @@ class dataLoader():
         data_all = data.iloc[ixs,:]
         targets_out = targets[data_all.index.values]
         return {'x':data_all,'y':targets_out}
+
+    def is_float(self, element):
+        try:
+            float(element)
+            return True
+        except ValueError:
+            return False
 
 if __name__ == "__main__":
     base_path = '/Users/jendawk/Dropbox (MIT)/M2M'

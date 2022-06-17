@@ -46,7 +46,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
             with open(path + 'microbe_clusters.txt', 'a') as f:
                 f.writelines('Cluster ' + str(ii) + ': ' + str(clust) + '\n')
 
-    fig2, ax2 = plt.subplots(3, 1)
+    fig2, ax2 = plt.subplots(3, 1, figsize = (8, 6*3))
     if mu_bug.shape[1]==2:
         fig, ax = plt.subplots(1, 2, figsize=(10, 5))
         p1 = ax[0].scatter(gen_bug_locs[:, 0], gen_bug_locs[:, 1], color = 'k', alpha = 0.5)
@@ -72,7 +72,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         ix = np.where(gen_u[:, i]==1)[0]
         ax2[0].hist(x[:, ix].flatten(), range=(x.min(), x.max()), label='Cluster ' + str(i), alpha=0.5, bins = bins)
     ax2[0].set_xlabel('Microbial relative abundances')
-    ax2[0].set_ylabel('# Microbes in Cluster x\n# Samples Per Microbe', fontsize = 10)
+    # ax2[0].set_ylabel('# Microbes in Cluster x\n# Samples Per Microbe', fontsize = 10)
     ax2[0].set_title('Microbes')
     if mu_bug.shape[1] == 2:
         ax[0].set_aspect('equal')
@@ -109,7 +109,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         ax2[2].hist(y[:, ix].flatten(), range=(y.min(), y.max()),
                     label='Cluster ' + str(i), alpha=0.5, bins = bins)
     ax2[2].set_xlabel('Standardized metabolite levels')
-    ax2[2].set_ylabel('# Metabolites in Cluster x\n# Samples Per Metabolite', fontsize = 10)
+    # ax2[2].set_ylabel('# Metabolites in Cluster x\n# Samples Per Metabolite', fontsize = 10)
     ax2[2].set_title('Metabolites')
 
     if mu_bug.shape[1] == 2:
@@ -208,6 +208,37 @@ def plot_distribution(dist, param, true_val = None, ptype = 'init', path = '', *
     plt.savefig(path + '/' + ptype + 's/' + param + '-' + '-'.join(r))
     plt.close(fig)
 
+def plot_posterior(param_dict, seed, out_path):
+    for key in param_dict[seed].keys():
+        print(key)
+        start = len(param_dict[seed][key])
+        fig, ax = plt.subplots()
+        all_dat = param_dict[seed][key]
+        try:
+            all_dat1 = np.concatenate(all_dat)
+            all_dat1 = all_dat1
+        except:
+            all_dat1 = all_dat
+
+        range = (np.array(all_dat1).flatten().min(), np.array(all_dat1).flatten().max())
+
+        iterset = np.int(len(param_dict[seed][key])/4)
+        for i in np.arange(4):
+            posterior_list = param_dict[seed][key][start - iterset: start]
+
+            try:
+                dat = np.concatenate(posterior_list)
+                dat = dat.flatten()
+            except:
+                dat = posterior_list
+            # dat = dat.detach().numpy().flatten()
+
+            ax.hist(dat, range = range, bins=20, label='Iterations ' + str(start - iterset) + ' to ' + str(start), alpha=0.5)
+            start = start - iterset
+        ax.legend()
+        ax.set_title(key + ', ' + str(len(param_dict[seed][key])) + ' iterations')
+        fig.savefig(out_path + str(seed) + '-' + key + '-posterior_dist.pdf')
+
 def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
     fig_dict, ax_dict = {},{}
     for name, plist in param_dict.items():
@@ -244,6 +275,7 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                         ax_dict[name].legend(loc='upper right')
                         ax_dict[name].set_xlabel('Iterations')
                         ax_dict[name].set_ylabel('Parameter Values')
+                        ax_dict[name].set_yscale('log')
                     else:
                         trace = [p.squeeze()[k] for p in plist]
                         ax_dict[name][k].plot(trace, label='Trace')
@@ -548,7 +580,8 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
     plt.close(fig)
 
     abs_err = np.abs(preds.detach().numpy() - targets)
-    perc_corr = len(np.where(abs_err.flatten() < 0.1)[0])/len(abs_err.flatten())
+    datstd = np.std(np.array(targets).flatten())
+    perc_corr = len(np.where(abs_err.flatten() < (0.25*datstd))[0])/len(abs_err.flatten())
     if not os.path.isfile(path + 'perc-corr.txt'):
         with open(path + 'perc-corr.txt', 'w') as f:
             f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
@@ -556,10 +589,11 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
         with open(path + 'perc-corr.txt', 'a') as f:
             f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
 
-    fig, ax = plt.subplots(8,1,figsize = (8,4*8))
+    num_mets = preds.shape[1]
+    fig, ax = plt.subplots(8,1,figsize = (np.int(num_mets/37)*2,8))
     for s in range(8):
-        ax[s].bar(np.arange(preds.shape[1])-0.2, preds[s,:].flatten().detach().numpy(), width = 0.4, label = 'Predicted')
-        ax[s].bar(np.arange(targets.shape[1]) + 0.2, targets[s, :].flatten(), width=0.4, label = 'True')
+        ax[s].bar(np.arange(preds.shape[1]), preds[s,:].flatten().detach().numpy(), width = 0.85, alpha= 0.5, label = 'Predicted')
+        ax[s].bar(np.arange(targets.shape[1]), targets[s, :].flatten(), width=0.85, alpha = 0.5, label = 'True')
         ax[s].set_title('Subject ' + str(s))
         ax[s].legend(loc= 'upper right')
     fig.savefig(path + 'seed' + str(fold) + '-predictions.png')
@@ -592,10 +626,10 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
     RMSE_std = np.round(np.std(RMSE),4)
     if not os.path.isfile(path + 'NRMSE.txt'):
         with open(path + 'NRMSE.txt', 'w') as f:
-            f.write('SEED ' + str(fold) + ' NRMSE: ' + str(RMSE_avg) + ' +-' + str(RMSE_std) + ', RMSE-2: ' + str(N_RMSE_est) + '\n')
+            f.write('SEED ' + str(fold) + ' NRMSE: ' + str(N_RMSE_est) + '\n')
     else:
         with open(path + 'NRMSE.txt', 'a') as f:
-            f.write('SEED ' + str(fold) + ' NRMSE: ' + str(RMSE_avg) + ' +-' + str(RMSE_std) + ', RMSE-2: ' + str(N_RMSE_est) + '\n')
+            f.write('SEED ' + str(fold) + ' NRMSE: ' + str(N_RMSE_est) + '\n')
 
     RMSE_df = pd.Series(RMSE, index = ['Metabolite ' + str(i) for i in range(len(RMSE))])
     RMSE_df.to_csv(path + 'seed' + str(fold) + 'RMSE.csv')

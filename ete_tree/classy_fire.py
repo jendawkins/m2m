@@ -19,28 +19,6 @@ from sklearn.cluster import AgglomerativeClustering
 import json
 from scipy.cluster.hierarchy import dendrogram
 
-def plot_dendrogram(model, **kwargs):
-    # Create linkage matrix and then plot the dendrogram
-
-    # create the counts of samples under each node
-    counts = np.zeros(model.children_.shape[0])
-    n_samples = len(model.labels_)
-    for i, merge in enumerate(model.children_):
-        current_count = 0
-        for child_idx in merge:
-            if child_idx < n_samples:
-                current_count += 1  # leaf node
-            else:
-                current_count += counts[child_idx - n_samples]
-        counts[i] = current_count
-
-    linkage_matrix = np.column_stack(
-        [model.children_, model.distances_, counts]
-    ).astype(float)
-
-    # Plot the corresponding dendrogram
-    dendrogram(linkage_matrix, **kwargs)
-
 def edit_string(string):
     return string.replace('(', '_').replace(')', '_').replace(':',
                                                  '_').replace(','
@@ -49,8 +27,72 @@ def edit_string(string):
 
 base_path = '/Users/jendawk/Dropbox (MIT)/M2M'
 t = ete3.TreeNode(base_path + '/ete_tree/newick_tree_all_weeks.nhx')
-dmat = pd.read_csv(base_path + '/inputs/pubchem/dice-dist_sm.csv', index_col=0)
+# dmat = pd.read_csv(base_path + '/inputs/pubchem/dice-dist_sm.csv', index_col=0)
+dmat = pd.read_csv(base_path + '/inputs/zeros_full.csv', index_col = 0).T
+coef_mat = pd.read_csv(base_path + '/inputs/coef_of_var.csv', index_col = 0)
+# dmat = dmat['Num Zeros']
+coefs = np.std(dmat, 1) / np.abs(np.mean(dmat, 1))
 metabs = list(map(edit_string, dmat.index.values))
+
+mets_keep = list(map(edit_string, dmat.index.values))
+tree_leaves = [n.name for n in t.traverse() if n.is_leaf()]
+rm_list = list(set(tree_leaves) - set(mets_keep))
+
+while len(rm_list)>0:
+    node_name = rm_list.pop()
+    n = t.search_nodes(name = node_name)[0]
+    parent = n.up
+    n.detach()
+    if len(parent.children)==0:
+        rm_list.append(parent.name)
+
+for n in t.traverse():
+    if not n.is_leaf():
+        n.add_face(ete3.TextFace(n.name+ '   ', fgcolor = 'red'), column = 0)
+t.render(base_path + '/figures/test_tree.pdf')
+node_order = [n.name for n in t.iter_descendants("postorder") if n.is_leaf()]
+
+dmat.index = list(map(edit_string, dmat.index.values))
+coef_mat.index = list(map(edit_string, coef_mat.index.values))
+coef_mat = coef_mat.loc[node_order]
+# dmat.columns = list(map(edit_string, dmat.columns.values))
+# dmat = dmat[node_order].loc[node_order]
+# sns.heatmap()
+# mets_keep = [n for n in dmat.index.values if n in node_order]
+# dmat_keep = dmat.loc[mets_keep]
+dmat = dmat.loc[node_order]
+darr = np.expand_dims(np.array(dmat),1)
+
+fig, ax = plt.subplots(figsize = (1,25))
+# sns.heatmap(darr, cmap='Blues', yticklabels=dmat.index.values, ax = ax)
+sns.heatmap(coef_mat, cmap='Blues', ax = ax)
+fig.tight_layout()
+fig.savefig(base_path + '/figures/cv.pdf')
+
+def num_parents(node, count=0):
+    if node.up == None:
+        return count
+    else:
+        return num_parents(node.up, count + 1)
+
+t_array = dmat.to_csv()
+t_array = '#Names' + t_array
+t_array = t_array.replace(',','\t ')
+
+ct = ete3.ClusterTree(t.write())
+ct.link_to_arraytable(t_array)
+for n_orig, n in zip(list(t.traverse()), list(ct.traverse())):
+    if not n.is_leaf():
+        count = num_parents(n_orig, 0)
+        if count <= 5:
+            n.add_face(ete3.TextFace(n_orig.name+ '   ', fgcolor = 'red'), column = 0)
+# for n in ct.traverse():
+#     if n.is_leaf():
+#         n.add_face(ete3.ProfileFace(style = "heatmap", max_v = 1, min_v = 0, center_v=0.5, colorscheme=0), column = 0)
+ts = ete3.TreeStyle()
+ts.show_leaf_name = True
+# ct.show("heatmap", tree_style=ts)
+ct.render(base_path + '/figures/test.pdf', layout = 'heatmap', tree_style = ts)
 
 link_mat = pd.DataFrame(np.zeros((len(metabs), len(metabs))), index = metabs, columns=metabs)
 for mets in itertools.combinations(metabs, 2):
@@ -74,49 +116,34 @@ for clust in np.unique(cluster.labels_):
         cluster_dict[(clust, mets_in_cluster[i])] = met_classes.loc[mets_in_cluster[i]]
 
 pd.DataFrame(cluster_dict).T.to_csv('cluster_w_connectivity.csv')
-plot_dendrogram(cluster, truncate_mode = "level", p=7)
+# plot_dendrogram(cluster, truncate_mode = "level", p=7)
 # dat = pd.read_csv(base_path + '/inputs/y.csv', index_col = 0, header = 0)
 # df_corr, pval = st.spearmanr(dat, axis = 0)
 # df_corr = np.triu(df_corr) + np.triu(df_corr).T
 # np.fill_diagonal(df_corr, 1)
 # dmat = pd.DataFrame(df_corr, index = dat.columns.values, columns = dat.columns.values)
 
-mets_keep = list(map(edit_string, dmat.index.values))
-tree_leaves = [n.name for n in t.traverse() if n.is_leaf()]
-rm_list = list(set(tree_leaves) - set(mets_keep))
+def plot_dendrogram(model, **kwargs):
+    # Create linkage matrix and then plot the dendrogram
 
-while len(rm_list)>0:
-    node_name = rm_list.pop()
-    n = t.search_nodes(name = node_name)[0]
-    parent = n.up
-    n.detach()
-    if len(parent.children)==0:
-        rm_list.append(parent.name)
+    # create the counts of samples under each node
+    counts = np.zeros(model.children_.shape[0])
+    n_samples = len(model.labels_)
+    for i, merge in enumerate(model.children_):
+        current_count = 0
+        for child_idx in merge:
+            if child_idx < n_samples:
+                current_count += 1  # leaf node
+            else:
+                current_count += counts[child_idx - n_samples]
+        counts[i] = current_count
 
-for n in t.traverse():
-    if not n.is_leaf():
-        n.add_face(ete3.TextFace(n.name+ '   ', fgcolor = 'red'), column = 0)
-t.render(base_path + '/figures/test_tree.pdf')
-node_order = [n.name for n in t.iter_descendants("postorder") if n.is_leaf()]
+    linkage_matrix = np.column_stack(
+        [model.children_, model.distances_, counts]
+    ).astype(float)
 
-dmat.index = list(map(edit_string, dmat.index.values))
-dmat.columns = list(map(edit_string, dmat.columns.values))
-dmat = dmat[node_order].loc[node_order]
-t_array = dmat.to_csv()
-t_array = '#Names' + t_array
-t_array = t_array.replace(',','\t ')
-
-ct = ete3.ClusterTree(t.write())
-ct.link_to_arraytable(t_array)
-for n in ct.traverse():
-    if not n.is_leaf():
-        n.add_face(ete3.TextFace(n.name+ '   ', fgcolor = 'red'), column = 0)
-# for n in ct.traverse():
-#     if n.is_leaf():
-#         n.add_face(ete3.ProfileFace(max_v = 0, min_v = 1, center_v=0.5), column = 0)
-ts = ete3.TreeStyle()
-ts.show_leaf_name = True
-ct.show("heatmap", tree_style=ts)
+    # Plot the corresponding dendrogram
+    dendrogram(linkage_matrix, **kwargs)
 
 def mylayout(node):
     # If node is a leaf

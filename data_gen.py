@@ -143,17 +143,17 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
         if not linear:
             # g = (g - np.mean(g,0))/np.std(g-np.mean(g,0))
             if nl_type == 'exp':
-                y[:, j] = np.random.normal(betas[0, k] + np.exp(g) @ (betas[1:, k] * alphas[:, k]), meas_var)
+                y[:, j] = np.random.normal(betas[0, k] + np.exp(g) @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
             if nl_type == 'sigmoid':
-                y[:, j] = np.random.normal(betas[0, k] + sigmoid(g) @ (betas[1:, k] * alphas[:, k]), meas_var)
+                y[:, j] = np.random.normal(betas[0, k] + sigmoid(g) @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
             if nl_type == 'sin':
-                y[:, j] = np.random.normal(betas[0, k] + np.sin(g) @ (betas[1:, k] * alphas[:, k]), meas_var)
+                y[:, j] = np.random.normal(betas[0, k] + np.sin(g) @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
             if nl_type == 'poly':
-                y[:,j] = np.random.normal(betas[0, k] + (g)**5 @ (betas[1:, k] * alphas[:, k]) - (g)**4 @ (betas[1:, k] * alphas[:, k]), meas_var)
+                y[:,j] = np.random.normal(betas[0, k] + (g)**5 @ (betas[1:, k] * alphas[:, k]) - (g)**4 @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
             if nl_type == 'linear':
-                y[:, j] = np.random.normal(betas[0, k] + g @ (betas[1:, k] * alphas[:, k]), meas_var)
+                y[:, j] = np.random.normal(betas[0, k] + g @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
         else:
-            y[:, j] = np.random.normal(betas[0, k] + g @ (betas[1:, k] * alphas[:, k]), meas_var)
+            y[:, j] = np.random.normal(betas[0, k] + g @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
 
         # ixs = np.where((betas[1:, k] * alphas[:, k]) > 1e-3)[0]
         # for ix in ixs:
@@ -172,7 +172,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
 
 if __name__ == "__main__":
     N_bug = 97
-    N_met = 153
+    N_met = 362
     K=10
     L=10
     dist_var_perc = 10
@@ -185,7 +185,7 @@ if __name__ == "__main__":
     repeat_clusters = 0
     cluster_std = 1
 
-    meas_var = 0.001
+    meas_var = 0.1
     if not os.path.isdir(orig_path + 'mvar_' + str(meas_var).replace('.','-')):
         os.mkdir(orig_path + 'mvar_' + str(meas_var).replace('.','-'))
     # for cluster_std in [1,3,6,10,12,100]:
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
         N_met=N_met, N_bug=N_bug, N_met_clusters=1,
         N_bug_clusters=L, meas_var=meas_var,
-        repeat_clusters=2, N_samples=48, linear=1,
+        repeat_clusters=0, N_samples=48, linear=1,
         nl_type='linear', dist_var_frac=2, cluster_std=cluster_std)
 
     # plt.figure()

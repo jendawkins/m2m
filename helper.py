@@ -13,6 +13,7 @@ import pickle as pkl
 from datetime import datetime
 import random
 import torch
+from collections import Counter
 import math
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.gamma import Gamma
@@ -298,11 +299,31 @@ def filter_by_pt(dataset, targets=None, perc = .15, pt_thresh = 1, meas_thresh =
         mets_all_keep = np.where(met_counts >= np.round(perc * mets.shape[0]))[0]
     return dataset.iloc[:,np.unique(mets_all_keep)]
 
+def get_meas_var(raw_data, repeat_data):
+    epsilon = get_epsilon(raw_data)
+    raw_log = np.log(raw_data + epsilon)
+    mn = np.mean(raw_log,0)
+    stdev = np.std(raw_log,0)
+    pooled_numerator = 0
+    pooled_denomenator = 0
+    for rep_dat in repeat_data:
+        rep_stand = np.log(rep_dat + epsilon)
+        rep_stand = (rep_stand - mn) / stdev
+        dof = rep_stand.shape[0]
+        pooled_numerator = pooled_numerator + np.sum((dof-1)*np.var(rep_stand))
+        pooled_denomenator = pooled_denomenator + (dof*rep_stand.shape[1]) - rep_stand.shape[1]
+
+    pooled_var = pooled_numerator / pooled_denomenator
+    return pooled_var
+
+
 def load_data(base_path, xfile, yfile, dataLoader):
     data_path = base_path + "/inputs"
-    dl = dataLoader(path=data_path, pt_perc={'metabs': .50, '16s': .1, 'scfa': 0, 'toxin': 0}, meas_thresh=
+    pt_perc = float('0.' + yfile.split('-')[1])
+    var_perc = float(yfile.split('-')[-1].split('.')[0])
+    dl = dataLoader(path=data_path, pt_perc={'metabs': pt_perc, '16s': .1, 'scfa': 0, 'toxin': 0}, meas_thresh=
     {'metabs': 0, '16s': 10, 'scfa': 0, 'toxin': 0},
-                    var_perc={'metabs': 75, '16s': 5, 'scfa': 0, 'toxin': 0}, pt_tmpts=1)
+                    var_perc={'metabs': var_perc, '16s': 5, 'scfa': 0, 'toxin': 0}, pt_tmpts=1)
 
     x = dl.week_sm_filt['16s'][1]['x']
     x = np.divide(x.T, np.sum(x, 1)).T
@@ -310,13 +331,21 @@ def load_data(base_path, xfile, yfile, dataLoader):
     taxa_labels = pd.read_csv(data_path + '/taxa_labels.csv', index_col=[0])
     x.columns = taxa_labels['labels'].loc[x.columns.values]
     y = dl.week_sm['metabs'][1]['x']
-    with open(base_path + '/ete_tree/met_to_inchikey.pkl', 'rb') as f:
-        met_to_inchikey = pkl.load(f)
-    inchikey_to_met = {met_to_inchikey[i]: i for i in met_to_inchikey.keys()}
-    classy_fire = os.listdir(base_path + '/ete_tree/classy_fire_results/')
-    mets_inchi = [inchikey_to_met[c.split('.csv')[0].split('=')[1]] for c in classy_fire]
-    met_keep = list(set(y.columns.values).intersection(set(mets_inchi)))
-    y = y[met_keep]
+
+    raw_dat = dl.cdiff_data_dict['data']
+    replicate_ixs = [d for d in raw_dat.index.values if not d.split('-')[1].split('.')[-1].isnumeric()]
+    repeat_dat = raw_dat[y.columns.values].loc[replicate_ixs]
+    y_raw = dl.week_sm_filt['metabs'][1]['x']
+    rep_pts = [ix.split('-')[0] for ix in replicate_ixs]
+    unique_ixs = np.unique(rep_pts)
+    rep_list = [repeat_dat.loc[[ix for ix in replicate_ixs if ix.split('-')[0] == unique_ix]] for unique_ix in unique_ixs]
+    pooled_var = get_meas_var(y_raw, rep_list)
+    with open(data_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'wb') as f:
+        pkl.dump(pooled_var, f)
+
+    met_classes = pd.read_csv(data_path + '/classy-fire/classy_fire_df.csv', header = 0, index_col = 0)
+    inter = set(met_classes.columns.values).intersection(y.columns.values)
+    y = y[inter]
     y = y.loc[x.index.values]
     # y.drop('linolenoyl-linolenoyl-glycerol (18:3/18:3) [2]*', axis = 1)
     x.to_csv(data_path + '/' + xfile)
@@ -352,11 +381,16 @@ def make_tree(feats, base_path, case, func='asv',
         subprocess.run(input_ls,
             cwd=base_path + "/ete_tree")
 
-def make_dist_mat(dat, dist_file, base_path, newick_path, dist_type = ''):
-    in_list = ["python3", "tree_plotter.py", "-fun", 'dist', "-name", dist_file,
-               "-newick", base_path + newick_path, "-dtype", dist_type, "-feat"]
-    in_list.extend(dat)
-    subprocess.run(in_list, cwd=base_path + "/ete_tree")
+def make_dist_mat(dat, dist_file, base_path, newick_path, dist_type = '', yfile = ''):
+    if '_' in dist_type:
+        in_list = ["python3", "rdk_fingerprints.py", "-fingerprint", dist_type.split('_')[0],
+                   "-metric" + dist_type.split('_')[1], "-yfile", yfile]
+        subprocess.run(in_list, cwd = base_path + '/rdk')
+    else:
+        in_list = ["python3", "tree_plotter.py", "-fun", 'dist', "-name", dist_file,
+                   "-newick", base_path + newick_path, "-dtype", dist_type, "-feat"]
+        in_list.extend(dat)
+        subprocess.run(in_list, cwd=base_path + "/ete_tree")
 
 def get_rand_locs(dat, dim, seed):
     a_met = np.random.uniform(0, 10, size=(dat.shape[1], dat.shape[1]))
@@ -374,9 +408,15 @@ def get_xtaxa(path, x):
     x_fams = x_fams.loc[x.columns.values]
     return x_fams
 
+def edit_string(string):
+    return string.replace('(', '_').replace(')', '_').replace(':',
+                                                 '_').replace(','
+                                                              , '_').replace('[', '_').replace(']', '_').replace(';',
+                                                                                                                 '_')
+
 def get_ytaxa(path, feats, ydist, level='subclass'):
     y_taxa = pd.read_csv(path, header=0, index_col=0)
-    y_class = y_taxa[level].loc[feats]
+    y_class = y_taxa[feats].loc[level]
     null_vals = y_class[y_class.isnull()].index.values
     for null_sub in y_class[y_class.isnull()].index.values:
         sorted_ls = ydist.loc[null_sub].sort_values().drop(null_vals)

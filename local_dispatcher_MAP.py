@@ -7,26 +7,27 @@ import time
 import numpy as np
 
 
-max_load = 2
+max_load = 6
 base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
 parser = argparse.ArgumentParser()
 parser.add_argument("-case", "--case", help="case", type=str)
+parser.add_argument("-syn", "--syn", help="use synthetic data or not", type=int)
 args = parser.parse_args()
 
 
-param_dict = {('L', 'K'): [(10,10)], 'seed': [0,1,2],
+param_dict = {('L', 'K'): [(10,10)], 'seed': [0,1,2,3,4],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
-              'iter': 10000,
+              'iter': 50000,
               'w_tau': [(-0.3, -3)],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
-              # 'N_met': 153, 'N_bug': 97,
-              # 'N_samples': 48,
-              'lr': [0.1,0.01,0.001], 'meas_var': 0.0001,
+              'N_met': 362, 'N_bug': 97,
+              'N_samples': 48,
+              'lr': [0.1,0.01], 'meas_var': 0.108,
               'syn': 0,
               'load': 0, 'linear': 0, 'hard': [0],
               'lm': [0], 'lb': [0], 'adjust_lr': [1], 'locs': ['none'],
-              'yfile': ['y_lt-one-stand.csv']
+              'yfile': ['y-95-5.csv']
               }
 
 
@@ -72,6 +73,8 @@ for p in zipped_params:
         my_str = my_str + ' -case ' + 'yfile_' + p[-1].split('.')[0].replace('-','_')
     elif args.case is not None:
         my_str = my_str + ' -case ' + args.case
+    if args.syn is not None and '-syn' not in my_str:
+        my_str = my_str + ' -syn ' + str(args.syn)
     cmd = my_str
     print(cmd)
     args2 = cmd.split(' ')
