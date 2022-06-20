@@ -947,7 +947,7 @@ if __name__ == "__main__":
     print(sys.executable)
     args.case = args.locs + '_' + args.case
     dtype = args.dtype
-    base_path = '/Users/jendawk/Dropbox (MIT)/M2M'
+    base_path = os.getcwd()
     if not os.path.isdir(base_path + '/outputs/'):
         os.mkdir(base_path + '/outputs/')
     if not os.path.isdir(base_path + '/outputs/' + args.case):
