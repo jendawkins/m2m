@@ -64,6 +64,9 @@ echo $TMPDIR
 # module load Anaconda3/5.2.0
 cd /PHShome/jjd65/m2m
 '''
+import os
+os.environ['MKL_THREADING_LAYER'] = 'GNU'
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-case", "--case", help="case", type=str)
 args = parser.parse_args()
