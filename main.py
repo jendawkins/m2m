@@ -473,7 +473,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     # add all other specified inputs to path to prevent overwriting results
     info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
            '-l1'*(args.l1) + '-'*(1-args.linear) +args.nltype*(1-args.linear) + '-lm'*args.lm + '-lb'*args.lb + \
-            '-meas_var' + str(args.meas_var).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
+            '-meas_var' + str(np.round(args.meas_var,3)).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
            '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
            '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_')
 
