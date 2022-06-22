@@ -15,6 +15,7 @@ from sklearn.cluster import KMeans
 import scipy
 from torch.distributions.half_normal import HalfNormal
 
+
 # from tree_plotter import plot_asv_tree, plot_orig_metab_tree, plot_metab_tree
 
 # this model initializes model parameters and contains all the model equations in the overleaf
@@ -470,7 +471,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
 
     # add all other specified inputs to path to prevent overwriting results
-    info = '-lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
+    info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
            '-l1'*(args.l1) + '-'*(1-args.linear) +args.nltype*(1-args.linear) + '-lm'*args.lm + '-lb'*args.lb + \
             '-meas_var' + str(args.meas_var).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
            '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
@@ -927,7 +928,7 @@ if __name__ == "__main__":
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
     parser.add_argument("-hard", "--hard", help="whether or not to sample alpha and omega in the forward pass", type=int, default=0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 0)
+    parser.add_argument("-linear", "--linear", type = int, default = 1)
     parser.add_argument("-nltype", "--nltype", type = str, default = "exp")
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1)
     parser.add_argument("-l1", "--l1", type=int, default=0)

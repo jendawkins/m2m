@@ -72,7 +72,7 @@ parser.add_argument("-case", "--case", help="case", type=str)
 args = parser.parse_args()
 
 
-param_dict = {('L', 'K'): [(10,10)], 'seed': [0,1,2],
+param_dict = {('L', 'K'): [(10,10),(20,20),(30,30)], 'seed': [0,1,2,3,4],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
               'iter': 60000,
@@ -80,11 +80,11 @@ param_dict = {('L', 'K'): [(10,10)], 'seed': [0,1,2],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
               # 'N_met': 153, 'N_bug': 97,
               # 'N_samples': 48,
-              'lr': [0.1,0.01,0.001], 'meas_var': 0.108,
-              'linear': [0,1],
+              'lr': [1, 0.1,0.01,0.001], 'meas_var': 0.108,
+              'linear': [0],
               'syn': 0,
               'load': 0, 'hard': [0],
-              'lm': [0,1], 'lb': [0,1], 'adjust_lr': [1], 'locs': ['none'],
+              'lm': [0], 'lb': [0], 'adjust_lr': [1], 'locs': ['none'],
               'yfile': ['y-95-5.csv']
               }
 
