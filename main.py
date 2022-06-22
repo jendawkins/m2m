@@ -838,6 +838,13 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                         subprocess.run(inputs,cwd=base_path + "/ete_tree")
 
 
+                if not os.path.isfile(path_orig + 'Num_Clusters.txt'):
+                    with open(path_orig + 'Num_Clusters.txt', 'w') as f:
+                        f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+                else:
+                    with open(path_orig + 'Num_Clusters.txt', 'a') as f:
+                        f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+
                 if not os.path.isfile(path + 'Num_Clusters.txt'):
                     with open(path + 'Num_Clusters.txt', 'w') as f:
                         f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
@@ -845,18 +852,19 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     with open(path + 'Num_Clusters.txt', 'a') as f:
                         f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
 
-                if not os.path.isfile(path + 'Loss.txt'):
-                    with open(path + 'Loss.txt', 'w') as f:
+
+                if not os.path.isfile(path_orig + 'Loss.txt'):
+                    with open(path_orig + 'Loss.txt', 'w') as f:
                         f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec)) + '\n')
                 else:
-                    with open(path + 'Loss.txt', 'a') as f:
+                    with open(path_orig + 'Loss.txt', 'a') as f:
                         f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec))+ '\n')
 
                 # fig = plot_predictions(cluster_outputs, torch.Tensor(np.array(y)), param_dict[args.seed]['z'][best_mod])
                 # fig.savefig(path + str(args.seed) + '-predictions.pdf')
                 # plt.close(fig)
                 try:
-                    plot_loss_dict(path, args.seed, loss_dict_vec)
+                    plot_loss_dict(path_orig, args.seed, loss_dict_vec)
                 except:
                     print('no loss dict')
                 plot_xvy(path, x, train_out_vec, best_mod, param_dict, args.seed)
@@ -868,7 +876,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 fig3.savefig(path_orig + 'loss_seed_' + str(args.seed) + '.pdf')
                 plt.close(fig3)
 
-                plot_posterior(param_dict, args.seed, path)
+                plot_posterior(param_dict, args.seed, path_orig)
 
                 plot_output(path, best_mod, train_out_vec, np.array(y), true_vals, param_dict[args.seed],
                                      args.seed, type = 'best_train', metabs = metabs, meas_var=args.meas_var)
@@ -877,7 +885,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                            'optimizer_state_dict':optimizer.state_dict(),
                            'epoch': epoch}
                 torch.save(save_dict,
-                           path + 'seed' + str(args.seed) + '_checkpoint.tar')
+                           path_orig + 'seed' + str(args.seed) + '_checkpoint.tar')
                 if 'beta' in param_dict[args.seed].keys():
                     with open(path + 'seed' + str(args.seed) + '_beta.txt', 'w') as f:
                         f.writelines(str(param_dict[args.seed]['beta'][best_mod]) + '\n')
@@ -886,9 +894,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     with open(path + 'seed' + str(args.seed) + '_beta-alpha.txt', 'w') as f:
                         f.writelines(str(param_dict[args.seed]['beta[1:,:]*alpha'][best_mod]) + '\n')
 
-                with open(path + str(args.seed) + '_param_dict.pkl', 'wb') as f:
+                with open(path_orig + str(args.seed) + '_param_dict.pkl', 'wb') as f:
                     pkl.dump(param_dict, f)
-                with open(path + str(args.seed) + '_loss.pkl', 'wb') as f:
+                with open(path_orig + str(args.seed) + '_loss.pkl', 'wb') as f:
                     pkl.dump(loss_vec, f)
 
                 with open(path_orig + 'seed' + str(args.seed) + '.txt', 'w') as f:
