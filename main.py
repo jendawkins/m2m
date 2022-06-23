@@ -403,12 +403,12 @@ class Model(nn.Module):
         loss = self.MAPloss.compute_loss(out_clusters,y)
 
         # add l1 regularization to loss
-        if not self.linear and self.l1:
-            l1_parameters = []
-            for parameter in self.NAM.parameters():
-                l1_parameters.append(parameter.view(-1))
-            l1 = self.compute_l1_loss(torch.cat(l1_parameters))
-            loss += l1
+        # if not self.linear and self.l1:
+        #     l1_parameters = []
+        #     for parameter in self.NAM.parameters():
+        #         l1_parameters.append(parameter.view(-1))
+        #     l1 = self.compute_l1_loss(torch.cat(l1_parameters))
+        #     loss += l1
         return out_clusters, loss
 
 
@@ -472,7 +472,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
     # add all other specified inputs to path to prevent overwriting results
     info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
-           '-l1'*(args.l1) + '-'*(1-args.linear) +args.nltype*(1-args.linear) + '-lm'*args.lm + '-lb'*args.lb + \
+           '-l1'*(args.l1) + '-'*(1-args.linear) +args.nltype*(1-args.linear)*args.syn + '-lm'*args.lm + '-lb'*args.lb + \
             '-meas_var' + str(np.round(args.meas_var,3)).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
            '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
            '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_')
@@ -580,18 +580,18 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         if name == 'z' or name == 'alpha' or name == 'w':
             parameter = getattr(net, name + '_act')
         if name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p':
-            parameter = np.exp(parameter.clone().detach().numpy())
+            parameter = np.exp(parameter.detach().numpy())
         if name == 'pi_met':
-            parameter = torch.softmax(parameter.clone().detach(),1).numpy()
+            parameter = torch.softmax(parameter.detach(),1).numpy()
         if torch.is_tensor(parameter):
-            param_dict[args.seed][name] = [parameter.clone().detach().numpy()]
+            param_dict[args.seed][name] = [parameter.detach().numpy()]
         else:
             param_dict[args.seed][name] = [parameter]
-    param_dict[args.seed]['z'] = [net.z_act.clone().numpy()]
+    param_dict[args.seed]['z'] = [net.z_act.detach().numpy()]
     if 'w' not in param_dict[args.seed].keys():
-        param_dict[args.seed]['w'] = [net.w_act.clone().detach().numpy()]
+        param_dict[args.seed]['w'] = [net.w_act.detach().numpy()]
     if net.linear:
-        param_dict[args.seed]['beta[1:,:]*alpha'] = [net.beta[1:,:].clone().detach().numpy()*net.alpha_act.clone().detach().numpy()]
+        param_dict[args.seed]['beta[1:,:]*alpha'] = [net.beta[1:,:].detach().numpy()*net.alpha_act.detach().numpy()]
 
     if not os.path.isdir(path + '/init_clusters/'):
         os.mkdir(path + '/init_clusters/')
@@ -711,7 +711,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         train_out_vec.append(cluster_outputs)
         try:
             loss.backward()
-            loss_vec.append(loss.item())
+            loss_vec.append(loss.detach().item())
             for param in net.MAPloss.loss_dict:
                 if param not in loss_dict_vec.keys():
                     loss_dict_vec[param] = [net.MAPloss.loss_dict[param].detach().item()]
@@ -729,19 +729,19 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             if name == 'z' or name == 'alpha' or name == 'w':
                 parameter = getattr(net, name + '_act')
             elif name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p':
-                parameter = np.exp(parameter.clone().detach().numpy())
+                parameter = np.exp(parameter.detach().numpy())
             elif name == 'pi_met':
-                parameter = torch.softmax(parameter.clone().detach(), 1).numpy()
+                parameter = torch.softmax(parameter.detach(), 1).numpy()
             if torch.is_tensor(parameter):
-                param_dict[args.seed][name].append(parameter.clone().detach().numpy())
+                param_dict[args.seed][name].append(parameter.detach().numpy())
             else:
                 param_dict[args.seed][name].append(parameter)
         if 'w' not in net.named_parameters():
-            param_dict[args.seed]['w'].append(net.w_act.clone().detach().numpy())
-        param_dict[args.seed]['z'].append(net.z_act.clone().numpy())
+            param_dict[args.seed]['w'].append(net.w_act.detach().numpy())
+        param_dict[args.seed]['z'].append(net.z_act.detach().numpy())
         if net.linear:
             param_dict[args.seed]['beta[1:,:]*alpha'].append(
-                net.beta[1:, :].clone().detach().numpy() * net.alpha_act.clone().detach().numpy())
+                net.beta[1:, :].detach().numpy() * net.alpha_act.detach().numpy())
 
         # if epoch % 100 == 0:
         #     temp = torch.softmax(net.pi_met, 1)
@@ -761,16 +761,16 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         # if epoch % 100 == 0 and epoch > 0:
         #     fig = plot_predictions(cluster_outputs, torch.Tensor(np.array(y)), param_dict[args.seed]['z'][-1])
         #     fig.savefig(path + str(args.seed) + '-per_clust_predictions.pdf')
-        if epoch % 5000 == 0:
+        if epoch % np.int(last_epoch/10) == 0:
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
-            save_dict = {'model_state_dict': net.state_dict(),
-                         'optimizer_state_dict': optimizer.state_dict(),
-                         'epoch': epoch}
-            torch.save(save_dict,
-                       path + 'seed' + str(args.seed) + '_checkpoint.tar')
+            # save_dict = {'model_state_dict': net.state_dict(),
+            #              'optimizer_state_dict': optimizer.state_dict(),
+            #              'epoch': epoch}
+            # torch.save(save_dict,
+            #            path_orig + 'seed' + str(args.seed) + '_checkpoint.tar')
 
         # at the last epoch, plot results
-        if epoch == last_epoch or epoch % 10000 == 0 or epoch == 0:
+        if epoch == last_epoch or epoch % np.int(last_epoch/3) == 0 or epoch == 0:
                 # or epoch%10000==0:
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
             if 'epoch' not in path:
@@ -936,7 +936,7 @@ if __name__ == "__main__":
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
     parser.add_argument("-hard", "--hard", help="whether or not to sample alpha and omega in the forward pass", type=int, default=0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 1)
+    parser.add_argument("-linear", "--linear", type = int, default = 0)
     parser.add_argument("-nltype", "--nltype", type = str, default = "exp")
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1)
     parser.add_argument("-l1", "--l1", type=int, default=0)

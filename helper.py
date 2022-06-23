@@ -27,7 +27,6 @@ from scipy.spatial.distance import squareform, pdist
 from sklearn.decomposition import PCA
 import subprocess
 
-
 def mds_choose_d(dat,dmax = 30, seed = 0):
     true_dist = squareform(dat)
     for d in np.arange(2,dmax):

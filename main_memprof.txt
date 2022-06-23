@@ -1,0 +1,555 @@
+Filename: main.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   367 1173.852 MiB 73753.891 MiB         101       @profile
+   368                                             def forward(self, x, y):
+   369                                                 # This is just to keep alpha from getting to close to 0 or 1 and causing numerical issues
+   370 1173.852 MiB    0.000 MiB         101           omega_epsilon = self.omega_temp / 4
+   371 1173.852 MiB    0.000 MiB         101           alpha_epsilon = self.alpha_temp / 4
+   372 1173.852 MiB    0.000 MiB         101           if self.microbe_locs is not None:
+   373                                                     kappa = torch.stack(
+   374                                                         [torch.sqrt(((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1)) for m in
+   375                                                          np.arange(self.microbe_locs.shape[0])])
+   376                                                     self.w_act = torch.sigmoid((torch.exp(self.r_bug) - kappa)/self.omega_temp)
+   377                                                 else:
+   378 1173.852 MiB    0.000 MiB         101               if not self.sample_w:
+   379 1173.852 MiB    0.039 MiB         101                   self.w_act = (1-2*omega_epsilon)*torch.sigmoid(self.w/self.omega_temp) + omega_epsilon
+   380                                                     else:
+   381                                                         self.w_soft, self.w_act = gumbel_sigmoid(self.w, self.omega_temp, omega_epsilon)
+   382                                                 # self.w_act = torch.ones(self.w_act.shape)
+   383 1173.852 MiB    0.734 MiB         101           g = x@self.w_act.float()
+   384                                                 # if sampling alpha in the forward pass
+   385 1173.852 MiB    0.000 MiB         101           if not self.sample_a:
+   386 1173.852 MiB    0.020 MiB         101               self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
+   387                                                 else:
+   388                                                     self.alpha_soft, self.alpha_act = gumbel_sigmoid(self.alpha, self.alpha_temp, alpha_epsilon)
+   389 1173.852 MiB    0.000 MiB         101           if self.linear:
+   390                                                     # out_clusters = self.beta[0,:] + torch.matmul(g, self.beta[1:,:]*self.alpha_act) + Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
+   391                                                     if self.gmm:
+   392                                                         out_clusters = self.beta[0, :]+ Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
+   393                                                     else:
+   394                                                         out_clusters = self.beta[0,:] + torch.matmul(g, self.beta[1:,:]*self.alpha_act) + Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
+   395                                         
+   396                                                 # out_clusters = torch.matmul(g, self.beta[1:, :] * self.alpha_act)
+   397                                                 else:
+   398 1175.301 MiB   34.832 MiB       89486               out_clusters = self.beta + torch.cat([torch.cat([self.alpha_act[l,k]*torch.stack([
+   399 1175.293 MiB  123.199 MiB       40400                   self.NAM[k][l][p](g[:,l:l+1]) for p in np.arange(self.p_nn)],-1).sum(-1)
+   400 1175.297 MiB    0.000 MiB       14140                                                     for l in np.arange(self.L)],1).sum(1).unsqueeze(1)
+   401 1175.301 MiB    0.016 MiB        1515                                                     for k in np.arange(self.K)],1) + Normal(
+   402 1175.301 MiB    0.230 MiB         202                   0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
+   403                                                 # compute loss via the priors
+   404 1179.918 MiB  272.449 MiB         101           loss = self.MAPloss.compute_loss(out_clusters,y)
+   405                                         
+   406                                                 # add l1 regularization to loss
+   407 1179.918 MiB    0.000 MiB         101           if not self.linear and self.l1:
+   408 1179.918 MiB    0.000 MiB         101               l1_parameters = []
+   409 1180.242 MiB    0.605 MiB       80901               for parameter in self.NAM.parameters():
+   410 1180.242 MiB   64.883 MiB       80800                   l1_parameters.append(parameter.view(-1))
+   411 1180.242 MiB    2.285 MiB         101               l1 = self.compute_l1_loss(torch.cat(l1_parameters))
+   412 1180.242 MiB    0.133 MiB         101               loss += l1
+   413 1180.242 MiB    0.000 MiB         101           return out_clusters, loss
+
+
+Filename: main.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   417  210.055 MiB  210.055 MiB           1   @profile
+   418                                         def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_path = '', plot_params = True,
+   419                                                         met_class = None, bug_class = None):
+   420  210.055 MiB    0.000 MiB           1       if args.linear == 1:
+   421                                                 args.l1 = 0
+   422  210.055 MiB    0.000 MiB           1       if x is not None and y is not None:
+   423  210.055 MiB    0.000 MiB           1           metabs = y.columns.values
+   424  210.055 MiB    0.000 MiB           1           seqs = x.columns.values
+   425  210.055 MiB    0.000 MiB           1           args.learn = 'all'
+   426                                                 # set path for saving results
+   427  210.055 MiB    0.000 MiB           1           path = base_path + '/outputs/'
+   428                                             else:
+   429                                                 path = base_path + '/outputs_gen/'
+   430                                                 metabs = None
+   431                                                 seqs = None
+   432  210.055 MiB    0.000 MiB           1       if not os.path.isdir(path):
+   433                                                 os.mkdir(path)
+   434                                         
+   435  210.055 MiB    0.000 MiB           1       if 'none' in args.priors:
+   436                                                 args.priors = []
+   437                                         
+   438  210.055 MiB    0.000 MiB           1       params2learn = args.learn
+   439  210.055 MiB    0.000 MiB           1       priors2set = args.priors
+   440                                             # set path for saving results
+   441  210.055 MiB    0.000 MiB           1       path = path + args.case.replace(' ','_')
+   442  210.055 MiB    0.000 MiB           1       if not os.path.isdir(path):
+   443                                                 os.mkdir(path)
+   444                                         
+   445  210.055 MiB    0.000 MiB           1       if 'all' in priors2set:
+   446  210.055 MiB    0.000 MiB           1           priors2set = ['alpha','beta','mu_bug','mu_met','r_bug','r_met','pi_met','e_met','sigma']
+   447  210.055 MiB    0.000 MiB           1           if a_bug is None:
+   448  210.055 MiB    0.000 MiB           1               priors2set.append('w')
+   449  210.055 MiB    0.000 MiB           1       if 'all' in params2learn:
+   450  210.055 MiB    0.000 MiB           1           params2learn = ['alpha','beta','mu_bug','mu_met','r_bug','r_met','pi_met','e_met','sigma']
+   451  210.055 MiB    0.000 MiB           1       if a_bug is None and 'w' not in params2learn:
+   452  210.055 MiB    0.000 MiB           1           params2learn.append('w')
+   453                                             # fix parameters specified in args.fix, and don't learn these parameters
+   454  210.055 MiB    0.000 MiB           1       if args.fix and x is None and y is None:
+   455                                                 for p in args.fix:
+   456                                                     if p in priors2set:
+   457                                                         priors2set.remove(p)
+   458                                                     if p in params2learn:
+   459                                                         params2learn.remove(p)
+   460                                         
+   461                                             # if we fix some parameters, add another folder to path
+   462  210.055 MiB    0.000 MiB           1       if 'all' not in args.learn or 'all' not in args.priors or (args.fix and x is None and y is None):
+   463                                                 path = path + '/learn_' + '_'.join(params2learn) + '-priors_' + '_'.join(priors2set) + '/'
+   464                                                 if not os.path.isdir(path):
+   465                                                     os.mkdir(path)
+   466  210.055 MiB    0.000 MiB           1       if args.fix is not None:
+   467                                                 if 'sigma' in args.fix:
+   468                                                     params2learn.remove('sigma')
+   469                                                     priors2set.remove('sigma')
+   470                                                     path = path + '/fix-sigma/'
+   471                                                     if not os.path.isdir(path):
+   472                                                         os.mkdir(path)
+   473                                         
+   474                                         
+   475                                             # add all other specified inputs to path to prevent overwriting results
+   476  210.062 MiB    0.000 MiB          21       info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
+   477  210.055 MiB    0.000 MiB           5              '-l1'*(args.l1) + '-'*(1-args.linear) +args.nltype*(1-args.linear)*args.syn + '-lm'*args.lm + '-lb'*args.lb + \
+   478  210.062 MiB    0.008 MiB           6               '-meas_var' + str(np.round(args.meas_var,3)).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
+   479  210.062 MiB    0.000 MiB           5              '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
+   480  210.062 MiB    0.000 MiB           4              '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_')
+   481                                         
+   482  210.062 MiB    0.000 MiB           1       path = path + '/' + info + '/'
+   483  210.062 MiB    0.000 MiB           1       if not os.path.isdir(path):
+   484  210.062 MiB    0.000 MiB           1           os.mkdir(path)
+   485                                         
+   486                                             # Generate data by calling data_gen.py and then plot
+   487  210.062 MiB    0.000 MiB           1       if x is None and y is None:
+   488                                                 x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+   489                                                 mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
+   490                                                     N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K,
+   491                                                     N_bug_clusters = args.L,meas_var = args.meas_var,
+   492                                                     repeat_clusters= args.rep_clust, N_samples=args.N_samples, linear = args.linear,
+   493                                                     nl_type = args.nltype, dist_var_frac=args.dist_var_perc, embedding_dim=args.dim)
+   494                                                 if not args.linear:
+   495                                                     gen_beta = gen_beta[0,:]
+   496                                                 try:
+   497                                                     plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+   498                                                                   r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
+   499                                                 except:
+   500                                                     print('no plots of gen data')
+   501                                         
+   502                                                 if ylocs is None:
+   503                                                     a_met = None
+   504                                                 else:
+   505                                                     a_met = gen_met_locs
+   506                                         
+   507                                                 if xlocs is None:
+   508                                                     a_bug = None
+   509                                                 else:
+   510                                                     a_bug = gen_bug_locs
+   511                                         
+   512                                                 # get true values from data_gen.py to compare to learned parameter values
+   513                                                 if args.lm:
+   514                                                     gen_z = np.hstack((gen_z, np.zeros((args.N_met, args.N_met - 1 - args.K))))
+   515                                                     if ylocs is not None:
+   516                                                         mu_met = np.vstack((mu_met, np.zeros((args.N_met - args.K - 1, mu_met.shape[1]))))
+   517                                                         r_met = np.append(r_met, np.zeros(args.N_met - 1 - len(r_met)))
+   518                                                     if args.linear:
+   519                                                         gen_beta = np.hstack((gen_beta, np.zeros((gen_beta.shape[0], args.N_met - args.K - 1))))
+   520                                                     gen_alpha = np.hstack((gen_alpha, np.zeros((gen_alpha.shape[0], args.N_met - args.K - 1))))
+   521                                                 if args.lb:
+   522                                                     if xlocs is not None:
+   523                                                         r_bug = np.append(r_bug, np.zeros(args.N_bug - 1 - len(r_bug)))
+   524                                                         mu_bug = np.vstack((mu_bug, np.zeros((args.N_bug - args.L - 1, mu_bug.shape[1]))))
+   525                                                     gen_w = np.hstack((gen_w, np.zeros((args.N_bug, args.N_bug - 1 - args.L))))
+   526                                                     gen_u = np.hstack((gen_u, np.zeros((args.N_bug, args.N_bug - 1 - args.L))))
+   527                                                     if args.linear:
+   528                                                         gen_beta = np.vstack((gen_beta, np.zeros((args.N_bug - args.L - 1, gen_beta.shape[1]))))
+   529                                                     gen_alpha = np.vstack((gen_alpha, np.zeros((args.N_bug - args.L - 1, gen_alpha.shape[1]))))
+   530                                                 true_vals = {'y':y, 'beta':gen_beta, 'alpha':gen_alpha, 'mu_bug': mu_bug,
+   531                                                              'mu_met': mu_met, 'u': gen_u,'w_soft': gen_w,'r_bug':1.2*r_bug, 'r_met': 1.2*r_met, 'z': gen_z,
+   532                                                              'w': gen_w, 'pi_met':np.expand_dims(np.sum(gen_z,0)/np.sum(np.sum(gen_z)),0),
+   533                                                              'pi_bug':np.expand_dims(np.sum(gen_w,0)/np.sum(np.sum(gen_w)),0), 'bug_locs': gen_bug_locs,
+   534                                                              'met_locs':gen_met_locs,
+   535                                                              'e_met': np.expand_dims(np.sum(gen_z,0)/np.sum(np.sum(gen_z)),0),'b': mu_met, 'sigma': args.meas_var}
+   536                                                 # just for plotting
+   537                                                 if args.linear:
+   538                                                     true_vals['beta[1:,:]*alpha'] = gen_beta[1:,:]*sigmoid(gen_alpha)
+   539                                             else:
+   540  210.062 MiB    0.000 MiB           1           true_vals = None
+   541                                         
+   542                                             # Define model and initialize with input seed
+   543  212.434 MiB    2.371 MiB           2       net = Model(a_met, a_bug, K=args.K, L=args.L,
+   544  210.062 MiB    0.000 MiB           1                   compute_loss_for=priors2set, N_met = y.shape[1], N_bug = x.shape[1],
+   545  210.062 MiB    0.000 MiB           1                   learn_num_bug_clusters=args.lb,learn_num_met_clusters=args.lm, linear = args.linear==1,
+   546  210.062 MiB    0.000 MiB           1                   p_nn = args.p_num, data_meas_var = args.meas_var, met_class = met_class, bug_class = bug_class,
+   547  210.062 MiB    0.000 MiB           1                   sample_w = args.hard, sample_a=args.hard, gmm = args.gmm)
+   548  212.672 MiB    0.238 MiB           1       net.initialize(args.seed)
+   549  212.707 MiB    0.035 MiB           1       net.to(device)
+   550                                         
+   551                                             # setattr(net, 'w', nn.Parameter(torch.zeros(net.w.shape), requires_grad=False))
+   552                                         
+   553                                             # plot prior distributions for all parameters
+   554  226.473 MiB    0.000 MiB           7       for param, dist in net.distributions.items():
+   555  226.059 MiB    0.000 MiB           6           parameter_dict = net.params[param]
+   556  226.059 MiB    0.000 MiB           6           try:
+   557  226.473 MiB   13.766 MiB           6               plot_distribution(dist, param, true_val = true_vals, ptype = 'prior', path = path, **parameter_dict)
+   558                                                 except:
+   559                                                     print(param + ' plot distribution error!!')
+   560                                         
+   561                                             # Set tau schedules for alpha and omega given inputs
+   562  226.477 MiB    0.004 MiB           1       alpha_tau_logspace = np.logspace(args.a_tau[0], args.a_tau[1], args.iterations)
+   563  226.477 MiB    0.000 MiB           1       omega_tau_logspace = np.logspace(args.w_tau[0], args.w_tau[1], args.iterations)
+   564  226.477 MiB    0.000 MiB           1       net.alpha_temp = alpha_tau_logspace[0]
+   565  226.477 MiB    0.000 MiB           1       net.omega_temp = omega_tau_logspace[0]
+   566                                         
+   567                                             # Record initial parameter values (we will also record per epoch for plotting purposes)
+   568  226.477 MiB    0.000 MiB           1       param_dict = {}
+   569  226.477 MiB    0.000 MiB           1       param_dict[args.seed] = {}
+   570  226.477 MiB    0.000 MiB           1       start = 0
+   571  226.566 MiB    0.000 MiB         806       for name, parameter in net.named_parameters():
+   572  226.566 MiB    0.000 MiB         805           if 'NAM' in name or 'lambda_mu' in name or name=='b' or name == 'C':
+   573                                                     continue
+   574  226.512 MiB    0.000 MiB           5           if name not in params2learn:
+   575                                                     if true_vals is not None:
+   576                                                         if name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p' or name == 'pi_met':
+   577                                                             setattr(net, name, nn.Parameter(torch.tensor(np.log(true_vals[name])).float(), requires_grad=False))
+   578                                                         else:
+   579                                                             setattr(net, name, nn.Parameter(torch.Tensor(true_vals[name]), requires_grad=False))
+   580                                                     elif name == 'sigma':
+   581                                                         setattr(net, name, nn.Parameter(torch.tensor(np.log(args.meas_var)).float(), requires_grad=False))
+   582  226.512 MiB    0.000 MiB           5           if name == 'z' or name == 'alpha' or name == 'w':
+   583  226.512 MiB    0.000 MiB           2               parameter = getattr(net, name + '_act')
+   584  226.512 MiB    0.000 MiB           5           if name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p':
+   585  226.512 MiB    0.035 MiB           1               parameter = np.exp(parameter.clone().detach().numpy())
+   586  226.512 MiB    0.000 MiB           5           if name == 'pi_met':
+   587  226.566 MiB    0.055 MiB           1               parameter = torch.softmax(parameter.clone().detach(),1).numpy()
+   588  226.566 MiB    0.000 MiB           5           if torch.is_tensor(parameter):
+   589  226.512 MiB    0.000 MiB           3               param_dict[args.seed][name] = [parameter.clone().detach().numpy()]
+   590                                                 else:
+   591  226.566 MiB    0.000 MiB           2               param_dict[args.seed][name] = [parameter]
+   592  226.566 MiB    0.000 MiB           1       param_dict[args.seed]['z'] = [net.z_act.clone().numpy()]
+   593  226.566 MiB    0.000 MiB           1       if 'w' not in param_dict[args.seed].keys():
+   594                                                 param_dict[args.seed]['w'] = [net.w_act.clone().detach().numpy()]
+   595  226.566 MiB    0.000 MiB           1       if net.linear:
+   596                                                 param_dict[args.seed]['beta[1:,:]*alpha'] = [net.beta[1:,:].clone().detach().numpy()*net.alpha_act.clone().detach().numpy()]
+   597                                         
+   598  226.566 MiB    0.000 MiB           1       if not os.path.isdir(path + '/init_clusters/'):
+   599  226.566 MiB    0.000 MiB           1           os.mkdir(path + '/init_clusters/')
+   600  226.566 MiB    0.000 MiB           1       best_z = param_dict[args.seed]['z'][0]
+   601  226.570 MiB    0.004 MiB           1       best_w = np.round(param_dict[args.seed]['w'][0])
+   602  226.570 MiB    0.000 MiB           1       best_alpha = np.round(param_dict[args.seed]['alpha'][0])
+   603  226.570 MiB    0.000 MiB           1       if args.linear == 1:
+   604                                                 get_interactions_csv(path, 0, param_dict, args.seed)
+   605  226.574 MiB    0.004 MiB           2       active_asv_clust = list(set(np.where(np.sum(best_w, 0) != 0)[0]).intersection(
+   606  226.574 MiB    0.000 MiB           1           set(np.where(np.sum(best_alpha, 1) != 0)[0])))
+   607  226.574 MiB    0.000 MiB           1       active_met_clust = np.where(np.sum(best_z, 0) != 0)[0]
+   608  226.574 MiB   -0.480 MiB          11       for asv_clust in active_asv_clust:
+   609  226.578 MiB   -0.941 MiB          10           asv_ix = np.where(best_w[:, asv_clust] != 0)[0]
+   610  226.578 MiB   -0.980 MiB          10           if seqs is not None:
+   611  226.578 MiB   -0.980 MiB          10               asv_ix = seqs[asv_ix]
+   612  226.578 MiB   -0.980 MiB          10           if not isinstance(asv_ix[0], str):
+   613                                                     asv_ix = [str(a) for a in asv_ix]
+   614  226.578 MiB   -1.961 MiB          20           inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree_init.pdf',
+   615  226.578 MiB   -0.980 MiB          10                     "-out", path + '/init_clusters/', "-newick", base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+   616  226.578 MiB   -0.980 MiB          10                     "-feat"]
+   617  226.578 MiB   -0.980 MiB          10           inputs.extend(asv_ix)
+   618  226.578 MiB   -0.980 MiB          10           print(inputs)
+   619  226.516 MiB   -1.105 MiB          10           subprocess.run(inputs, cwd=base_path + "/ete_tree")
+   620  226.457 MiB   -0.117 MiB          11       for met_clust in active_met_clust:
+   621  226.457 MiB   -0.191 MiB          10           met_ix = np.where(best_z[:, met_clust] != 0)[0]
+   622  226.457 MiB   -0.191 MiB          10           if metabs is not None:
+   623  226.457 MiB   -0.191 MiB          10               met_ix = metabs[met_ix]
+   624  226.457 MiB   -0.191 MiB          10           if not isinstance(met_ix[0], str):
+   625                                                     met_ix = [str(a) for a in met_ix]
+   626  226.457 MiB   -0.383 MiB          20           inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree_init.pdf',
+   627  226.457 MiB   -0.191 MiB          10                     "-out", path + '/init_clusters/', "-newick", base_path + '/ete_tree/w1_newick_tree.nhx', "-feat"]
+   628  226.457 MiB   -0.191 MiB          10           inputs.extend(met_ix)
+   629  226.438 MiB   -0.211 MiB          10           subprocess.run(inputs, cwd=base_path + "/ete_tree")
+   630                                         
+   631  226.438 MiB   -0.020 MiB           1       if a_met is not None and args.xdim == 2 and args.ydim == 2:
+   632                                                 plot_output_locations(path, net, 0, param_dict[args.seed], args.seed, plot_zeros=1)
+   633  226.438 MiB    0.000 MiB           1       loss_vec = []
+   634  226.438 MiB    0.000 MiB           1       train_out_vec = []
+   635  226.438 MiB    0.000 MiB           1       lr_dict = {}
+   636  226.438 MiB    0.000 MiB           1       matching_dict = {}
+   637                                         
+   638                                             # Adjust each parameter's learning rate based on parameter size
+   639  226.438 MiB    0.000 MiB           1       lr_list = []
+   640  226.438 MiB    0.000 MiB           1       ii = 0
+   641  226.754 MiB    0.066 MiB         806       for name, parameter in net.named_parameters():
+   642  226.754 MiB    0.000 MiB         805           if name in params2learn or 'all' in params2learn or 'NAM' in name:
+   643  226.754 MiB    0.000 MiB         805               if name not in net.lr_range.keys():
+   644  226.754 MiB    0.004 MiB         800                   range = np.abs(np.max(parameter.detach().view(-1).numpy()) - np.min(parameter.detach().view(-1).numpy()))
+   645                                                     else:
+   646  226.438 MiB    0.000 MiB           5                   range = net.lr_range[name]
+   647  226.754 MiB    0.000 MiB         805               matching_dict[name] = ii
+   648  226.754 MiB    0.000 MiB         805               ii+= 1
+   649  226.754 MiB    0.000 MiB         805               if args.adjust_lr:
+   650  226.754 MiB    0.223 MiB         805                   lr_list.append({'params': parameter, 'lr': (args.lr / net.lr_range['beta']) * range})
+   651                                                     else:
+   652                                                         lr_list.append({'params': parameter})
+   653  226.754 MiB    0.023 MiB         805               lr_dict[name] = [(args.lr / net.lr_range['beta'].item()) * range.item()]
+   654                                                 # initialize optimizer
+   655  226.836 MiB    0.082 MiB           1       optimizer = optim.RMSprop(lr_list, lr=args.lr)
+   656  226.836 MiB    0.000 MiB           1       if args.adjust_lr:
+   657  227.293 MiB    0.457 MiB           1           pd.Series(net.lr_range).to_csv(path + 'param_estimated_sizes.csv')
+   658  227.305 MiB    0.012 MiB           1           pd.DataFrame(lr_dict).T.to_csv(path + 'per_param_lr.csv')
+   659                                         
+   660                                             # If args.load == 1, load previously trained model and re-start training at the last saved epoch
+   661  227.305 MiB    0.000 MiB           1       epochs = re.findall('epoch\d+', ' '.join(os.listdir(path)))
+   662  227.305 MiB    0.000 MiB           1       path_orig = path
+   663  227.305 MiB    0.000 MiB           1       if len(epochs)>0:
+   664                                                 if os.path.isfile(path_orig + 'seed' + str(args.seed) + '.txt'):
+   665                                                     with open(path_orig + 'seed' + str(args.seed) + '.txt', 'r') as f:
+   666                                                         largest = int(f.readlines()[0])
+   667                                                 else:
+   668                                                     largest = max([int(num.split('epoch')[-1]) for num in epochs])
+   669                                                 foldername = path + 'epoch' + str(largest) + '/'
+   670                                                 if 'seed' + str(args.seed) + '_checkpoint.tar' in os.listdir(foldername) and args.load==1:
+   671                                                     checkpoint = torch.load(foldername + 'seed' + str(args.seed) + '_checkpoint.tar')
+   672                                                     net.load_state_dict(checkpoint['model_state_dict'])
+   673                                                     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+   674                                                     start = int(checkpoint['epoch'] - 1)
+   675                                                     ix = int(checkpoint['epoch'])-1000
+   676                                                     if ix >= len(alpha_tau_logspace):
+   677                                                         ix = -1
+   678                                                     if ix > -1:
+   679                                                         net.alpha_temp = alpha_tau_logspace[ix]
+   680                                                         net.omega_temp = omega_tau_logspace[ix]
+   681                                                     else:
+   682                                                         net.alpha_temp = alpha_tau_logspace[0]
+   683                                                         net.omega_temp = omega_tau_logspace[0]
+   684                                                     if args.iterations-1 <= start:
+   685                                                         print('training complete')
+   686                                                         sys.exit()
+   687                                                     print('model loaded')
+   688                                                 else:
+   689                                                     print('no model loaded')
+   690                                             else:
+   691  227.305 MiB    0.000 MiB           1           print('no model loaded')
+   692                                         
+   693                                             # plot initialized cluster locations & means
+   694  227.305 MiB    0.000 MiB           1       if not os.path.isdir(path + '/epoch0'):
+   695  227.305 MiB    0.000 MiB           1           os.mkdir(path + '/epoch0')
+   696                                             # plot_syn_data(path + '/epoch0/seed' + str(args.seed), x, y, gen_z, gen_bug_locs, gen_met_locs, net.mu_bug.detach().numpy(),
+   697                                             #               torch.exp(net.r_bug.detach()).numpy(), net.mu_met.detach().numpy(), torch.exp(net.r_met.detach()).numpy(),
+   698                                             #               gen_w)
+   699                                         
+   700                                             # Train model over the number of specified input iterations in args.iterations
+   701  227.305 MiB    0.000 MiB           1       x = torch.Tensor(np.array(x)).to(device)
+   702  227.305 MiB    0.000 MiB           1       loss_dict_vec = {}
+   703  227.305 MiB    0.000 MiB           1       ix = 0
+   704                                             # stime = time.time()
+   705  227.305 MiB    0.000 MiB           1       last_epoch = 0
+   706 1292.531 MiB    0.000 MiB         102       for epoch in np.arange(start, args.iterations+1):
+   707 1173.852 MiB    0.000 MiB         101           if epoch ==1:
+   708  240.328 MiB    0.000 MiB           1               stime = time.time()
+   709 1173.852 MiB    0.000 MiB         101           net.alpha_temp = alpha_tau_logspace[ix]
+   710 1173.852 MiB    0.000 MiB         101           net.omega_temp = omega_tau_logspace[ix]
+   711 1173.852 MiB    0.148 MiB         101           optimizer.zero_grad()
+   712 1180.242 MiB 74253.379 MiB         101           cluster_outputs, loss = net(x, torch.Tensor(np.array(y)))
+   713 1180.242 MiB    0.000 MiB         101           train_out_vec.append(cluster_outputs)
+   714 1180.242 MiB    0.000 MiB         101           try:
+   715 1183.598 MiB  273.266 MiB         101               loss.backward()
+   716 1183.598 MiB    0.000 MiB         101               loss_vec.append(loss.item())
+   717 1183.598 MiB    0.000 MiB         808               for param in net.MAPloss.loss_dict:
+   718 1183.598 MiB    0.000 MiB         707                   if param not in loss_dict_vec.keys():
+   719  239.832 MiB    0.000 MiB           7                       loss_dict_vec[param] = [net.MAPloss.loss_dict[param].detach().item()]
+   720                                                         else:
+   721 1183.598 MiB    0.004 MiB         700                       loss_dict_vec[param].append(net.MAPloss.loss_dict[param].detach().item())
+   722 1183.598 MiB    0.414 MiB         101               optimizer.step()
+   723 1183.598 MiB    0.000 MiB         101               last_epoch = args.iterations
+   724                                                 except:
+   725                                                     last_epoch = epoch
+   726                                         
+   727                                                 # keep track of updated parameter values
+   728 1183.598 MiB    0.000 MiB       81406           for name, parameter in net.named_parameters():
+   729 1183.598 MiB    0.000 MiB       81305               if 'NAM' in name or 'lambda_mu' in name or name=='b' or name == 'C':
+   730                                                         continue
+   731 1183.598 MiB    0.000 MiB         505               if name == 'z' or name == 'alpha' or name == 'w':
+   732 1183.598 MiB    0.000 MiB         202                   parameter = getattr(net, name + '_act')
+   733 1183.598 MiB    0.000 MiB         303               elif name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p':
+   734 1183.598 MiB    0.000 MiB         101                   parameter = np.exp(parameter.clone().detach().numpy())
+   735 1183.598 MiB    0.000 MiB         202               elif name == 'pi_met':
+   736 1183.598 MiB    0.000 MiB         101                   parameter = torch.softmax(parameter.clone().detach(), 1).numpy()
+   737 1183.598 MiB    0.000 MiB         505               if torch.is_tensor(parameter):
+   738 1183.598 MiB    0.008 MiB         303                   param_dict[args.seed][name].append(parameter.clone().detach().numpy())
+   739                                                     else:
+   740 1183.598 MiB    0.000 MiB         202                   param_dict[args.seed][name].append(parameter)
+   741 1183.598 MiB    0.000 MiB         101           if 'w' not in net.named_parameters():
+   742 1183.598 MiB    0.000 MiB         101               param_dict[args.seed]['w'].append(net.w_act.clone().detach().numpy())
+   743 1183.598 MiB    0.004 MiB         101           param_dict[args.seed]['z'].append(net.z_act.clone().numpy())
+   744 1183.598 MiB    0.000 MiB         101           if net.linear:
+   745                                                     param_dict[args.seed]['beta[1:,:]*alpha'].append(
+   746                                                         net.beta[1:, :].clone().detach().numpy() * net.alpha_act.clone().detach().numpy())
+   747                                         
+   748                                                 # if epoch % 100 == 0:
+   749                                                 #     temp = torch.softmax(net.pi_met, 1)
+   750                                                 #     fig, ax = plt.subplots(net.K, 1, figsize = (8, 8*net.K))
+   751                                                 #     for ixx in np.arange(net.K):
+   752                                                 #         ax[ixx].hist(np.repeat(cluster_outputs[:,ixx].detach().numpy(), y.shape[1]), bins = 20, label = 'Predicted')
+   753                                                 #         ax[ixx].hist(np.array(y).flatten(), bins = 20, label = 'True')
+   754                                                 #         if torch.sum(net.z_act[:,ixx]) != 0:
+   755                                                 #             ax[ixx].set_title('Cluster ' + str(ixx) + ' ON, pi=' + str(temp[0][ixx]))
+   756                                                 #         else:
+   757                                                 #             ax[ixx].set_title('Cluster ' + str(ixx) + ', pi=' + str(temp[0][ixx]))
+   758                                                 #         ax[ixx].legend()
+   759                                                 #     fig.tight_layout()
+   760                                                 #     fig.savefig(path + str(epoch) + 'cluster_dist.pdf')
+   761                                                 #     plt.close(fig)
+   762                                         
+   763                                                 # if epoch % 100 == 0 and epoch > 0:
+   764                                                 #     fig = plot_predictions(cluster_outputs, torch.Tensor(np.array(y)), param_dict[args.seed]['z'][-1])
+   765                                                 #     fig.savefig(path + str(args.seed) + '-per_clust_predictions.pdf')
+   766 1183.598 MiB    0.000 MiB         101           if epoch % np.int(last_epoch/10) == 0:
+   767 1183.598 MiB    0.000 MiB          11               print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
+   768 1183.598 MiB    0.203 MiB          22               save_dict = {'model_state_dict': net.state_dict(),
+   769 1183.598 MiB    0.164 MiB          11                            'optimizer_state_dict': optimizer.state_dict(),
+   770 1183.598 MiB    0.000 MiB          11                            'epoch': epoch}
+   771 1183.605 MiB    0.836 MiB          22               torch.save(save_dict,
+   772 1183.598 MiB    0.000 MiB          11                          path + 'seed' + str(args.seed) + '_checkpoint.tar')
+   773                                         
+   774                                                 # at the last epoch, plot results
+   775 1183.605 MiB    0.000 MiB         101           if epoch == last_epoch or epoch % np.int(last_epoch/2) == 0 or epoch == 0:
+   776                                                         # or epoch%10000==0:
+   777 1183.605 MiB    0.000 MiB           3               print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
+   778 1183.605 MiB    0.000 MiB           3               if 'epoch' not in path:
+   779  240.328 MiB    0.000 MiB           1                   path = path + 'epoch' + str(epoch) + '/'
+   780                                                     else:
+   781 1183.605 MiB    0.000 MiB           2                   path = path.split('epoch')[0] + 'epoch' + str(epoch) + '/'
+   782 1183.605 MiB    0.000 MiB           3               if not os.path.isdir(path):
+   783 1183.605 MiB    0.000 MiB           2                   os.mkdir(path)
+   784 1183.605 MiB    0.000 MiB           3               if net.met_embedding_dim is not None and net.met_embedding_dim == 2 and net.bug_embedding_dim==2:
+   785                                                         plot_output_locations(path, net, -1, param_dict[args.seed], args.seed,
+   786                                                                               type='best_train', plot_zeros=False)
+   787                                                         plot_output_locations(path, net, -1, param_dict[args.seed], args.seed,
+   788                                                                               type='best_train', plot_zeros=True)
+   789 1183.605 MiB    0.000 MiB           3               print('Epoch ' + str(epoch))
+   790                                         
+   791 1183.605 MiB    0.000 MiB           3               if epoch >= 1:
+   792 1183.605 MiB    0.000 MiB           2                   if 'epoch' not in path:
+   793                                                             path = path + 'epoch' + str(epoch) + '/'
+   794                                                         else:
+   795 1183.605 MiB    0.000 MiB           2                       path = path.split('epoch')[0] + 'epoch' + str(epoch) + '/'
+   796 1183.605 MiB    0.000 MiB           2                   if not os.path.isdir(path):
+   797                                                             os.mkdir(path)
+   798 1183.605 MiB    0.000 MiB           2                   if not os.path.isdir(path + 'seed' + str(args.seed) + '-clusters/'):
+   799 1183.605 MiB    0.000 MiB           2                       os.mkdir(path + 'seed' + str(args.seed) + '-clusters/')
+   800 1183.605 MiB    0.000 MiB           2                   best_mod = np.argmin(loss_vec)
+   801 1183.605 MiB    0.000 MiB           2                   best_z = param_dict[args.seed]['z'][best_mod]
+   802 1183.605 MiB    0.000 MiB           2                   best_w = np.round(param_dict[args.seed]['w'][best_mod])
+   803 1183.605 MiB    0.000 MiB           2                   best_alpha = np.round(param_dict[args.seed]['alpha'][best_mod])
+   804                                         
+   805                                                         # plot_cluster_outputs_vs_met_value(best_z, y, cluster_outputs, path, seed = args.seed)
+   806 1183.605 MiB    0.000 MiB           2                   if args.linear == 1:
+   807                                                             get_interactions_csv(path, best_mod, param_dict, args.seed)
+   808 1183.605 MiB    0.000 MiB           2                   if args.hard != 1:
+   809 1183.605 MiB    0.012 MiB           2                       pd.DataFrame(param_dict[args.seed]['alpha'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'alpha.csv')
+   810 1183.605 MiB    0.008 MiB           2                       pd.DataFrame(param_dict[args.seed]['w'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'omega.csv')
+   811                                         
+   812 1183.605 MiB    0.000 MiB           2                   if not args.syn:
+   813 1183.605 MiB    0.000 MiB           2                       met_newick_name = 'newick_' + args.yfile.split('.csv')[0] + '.nhx'
+   814 1183.605 MiB    0.000 MiB           4                       active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
+   815 1183.605 MiB    0.000 MiB           2                           set(np.where(np.sum(best_alpha,1)!= 0)[0])))
+   816 1183.605 MiB    0.000 MiB           2                       active_met_clust = np.where(np.sum(best_z,0) != 0)[0]
+   817 1183.605 MiB    0.000 MiB          22                       for asv_clust in active_asv_clust:
+   818 1183.605 MiB   -0.559 MiB          20                           asv_ix = np.where(best_w[:,asv_clust]!= 0)[0]
+   819 1183.605 MiB   -0.562 MiB          20                           if seqs is not None:
+   820 1183.605 MiB   -0.562 MiB          20                               asv_ix = seqs[asv_ix]
+   821 1183.605 MiB   -0.562 MiB          20                           if not isinstance(asv_ix[0], str):
+   822                                                                     asv_ix = [str(a) for a in asv_ix]
+   823 1183.605 MiB   -1.125 MiB          40                           inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree.pdf',
+   824 1183.605 MiB   -0.562 MiB          20                                "-out", path + 'seed' + str(args.seed) + '-clusters/',
+   825 1183.605 MiB   -0.562 MiB          20                                     "-newick",base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx', "-feat"]
+   826 1183.605 MiB   -0.562 MiB          20                           inputs.extend(asv_ix)
+   827 1183.543 MiB   -0.625 MiB          20                           subprocess.run(inputs,cwd=base_path + "/ete_tree")
+   828 1183.543 MiB   -0.062 MiB           2                       if len(active_met_clust) > 20:
+   829                                                                 active_met_clust = active_met_clust[:20]
+   830 1183.543 MiB    0.000 MiB           5                       for met_clust in active_met_clust:
+   831 1183.543 MiB    0.000 MiB           3                           met_ix = np.where(best_z[:, met_clust]!=0)[0]
+   832 1183.543 MiB    0.000 MiB           3                           if metabs is not None:
+   833 1183.543 MiB    0.000 MiB           3                               met_ix = metabs[met_ix]
+   834 1183.543 MiB    0.000 MiB           3                           if not isinstance(met_ix[0], str):
+   835                                                                     met_ix = [str(a) for a in met_ix]
+   836 1183.543 MiB    0.000 MiB           6                           inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree.pdf',
+   837 1183.543 MiB    0.000 MiB           3                                "-out", path+ 'seed' + str(args.seed) + '-clusters/',
+   838 1183.543 MiB    0.000 MiB           3                                     "-newick", base_path + '/ete_tree/' + met_newick_name,"-feat"]
+   839 1183.543 MiB    0.000 MiB           3                           inputs.extend(met_ix)
+   840 1183.543 MiB    0.000 MiB           3                           subprocess.run(inputs,cwd=base_path + "/ete_tree")
+   841                                         
+   842                                         
+   843 1183.543 MiB    0.000 MiB           2                   if not os.path.isfile(path_orig + 'Num_Clusters.txt'):
+   844  655.586 MiB    0.000 MiB           1                       with open(path_orig + 'Num_Clusters.txt', 'w') as f:
+   845  655.586 MiB    0.000 MiB           1                           f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+   846                                                         else:
+   847 1183.543 MiB    0.000 MiB           1                       with open(path_orig + 'Num_Clusters.txt', 'a') as f:
+   848 1183.543 MiB    0.000 MiB           1                           f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+   849                                         
+   850 1183.543 MiB    0.000 MiB           2                   if not os.path.isfile(path + 'Num_Clusters.txt'):
+   851 1183.543 MiB    0.000 MiB           2                       with open(path + 'Num_Clusters.txt', 'w') as f:
+   852 1183.543 MiB    0.000 MiB           2                           f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+   853                                                         else:
+   854                                                             with open(path + 'Num_Clusters.txt', 'a') as f:
+   855                                                                 f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+   856                                         
+   857                                         
+   858 1183.543 MiB    0.000 MiB           2                   if not os.path.isfile(path_orig + 'Loss.txt'):
+   859  655.586 MiB    0.000 MiB           1                       with open(path_orig + 'Loss.txt', 'w') as f:
+   860  655.586 MiB    0.000 MiB           1                           f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec)) + '\n')
+   861                                                         else:
+   862 1183.543 MiB    0.000 MiB           1                       with open(path_orig + 'Loss.txt', 'a') as f:
+   863 1183.543 MiB    0.000 MiB           1                           f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec))+ '\n')
+   864                                         
+   865                                                         # fig = plot_predictions(cluster_outputs, torch.Tensor(np.array(y)), param_dict[args.seed]['z'][best_mod])
+   866                                                         # fig.savefig(path + str(args.seed) + '-predictions.pdf')
+   867                                                         # plt.close(fig)
+   868 1183.543 MiB    0.000 MiB           2                   try:
+   869 1187.855 MiB   18.809 MiB           2                       plot_loss_dict(path_orig, args.seed, loss_dict_vec)
+   870                                                         except:
+   871                                                             print('no loss dict')
+   872 1188.082 MiB    0.434 MiB           2                   plot_xvy(path, x, train_out_vec, best_mod, param_dict, args.seed)
+   873 1188.082 MiB    0.000 MiB           2                   if plot_params and args.load == 0:
+   874 1231.406 MiB  135.766 MiB           2                       plot_param_traces(path, param_dict[args.seed], params2learn, true_vals, net, args.seed)
+   875 1231.570 MiB    0.297 MiB           2                   fig3, ax3 = plt.subplots(figsize=(8, 8))
+   876 1231.586 MiB    0.031 MiB           2                   fig3, ax3 = plot_loss(fig3, ax3, args.seed, np.arange(len(loss_vec)), loss_vec, lowest_loss=None)
+   877 1236.023 MiB   10.246 MiB           2                   fig3.tight_layout()
+   878 1238.293 MiB    4.922 MiB           2                   fig3.savefig(path_orig + 'loss_seed_' + str(args.seed) + '.pdf')
+   879 1238.266 MiB   -0.055 MiB           2                   plt.close(fig3)
+   880                                         
+   881 1255.633 MiB   35.391 MiB           2                   plot_posterior(param_dict, args.seed, path_orig)
+   882                                         
+   883 1289.773 MiB   80.609 MiB           4                   plot_output(path, best_mod, train_out_vec, np.array(y), true_vals, param_dict[args.seed],
+   884 1255.633 MiB    0.000 MiB           2                                        args.seed, type = 'best_train', metabs = metabs, meas_var=args.meas_var)
+   885                                         
+   886 1290.027 MiB    0.383 MiB           4                   save_dict = {'model_state_dict':net.state_dict(),
+   887 1290.027 MiB    0.574 MiB           2                              'optimizer_state_dict':optimizer.state_dict(),
+   888 1290.027 MiB    0.000 MiB           2                              'epoch': epoch}
+   889 1291.863 MiB    2.648 MiB           4                   torch.save(save_dict,
+   890 1290.027 MiB    0.000 MiB           2                              path_orig + 'seed' + str(args.seed) + '_checkpoint.tar')
+   891 1291.863 MiB    0.000 MiB           2                   if 'beta' in param_dict[args.seed].keys():
+   892 1291.863 MiB    0.000 MiB           2                       with open(path + 'seed' + str(args.seed) + '_beta.txt', 'w') as f:
+   893 1291.863 MiB    0.000 MiB           2                           f.writelines(str(param_dict[args.seed]['beta'][best_mod]) + '\n')
+   894                                         
+   895 1291.863 MiB    0.000 MiB           2                   if 'beta[1:,:]*alpha' in param_dict[args.seed].keys():
+   896                                                             with open(path + 'seed' + str(args.seed) + '_beta-alpha.txt', 'w') as f:
+   897                                                                 f.writelines(str(param_dict[args.seed]['beta[1:,:]*alpha'][best_mod]) + '\n')
+   898                                         
+   899 1291.863 MiB    0.000 MiB           2                   with open(path_orig + str(args.seed) + '_param_dict.pkl', 'wb') as f:
+   900 1292.531 MiB    0.672 MiB           2                       pkl.dump(param_dict, f)
+   901 1292.531 MiB    0.000 MiB           2                   with open(path_orig + str(args.seed) + '_loss.pkl', 'wb') as f:
+   902 1292.531 MiB    0.000 MiB           2                       pkl.dump(loss_vec, f)
+   903                                         
+   904 1292.531 MiB    0.000 MiB           2                   with open(path_orig + 'seed' + str(args.seed) + '.txt', 'w') as f:
+   905 1292.531 MiB    0.000 MiB           2                       f.writelines(str(epoch))
+   906                                         
+   907 1292.531 MiB    0.000 MiB           2                   etime= time.time()
+   908 1292.531 MiB    0.000 MiB           2                   with open(path_orig + 'seed' + str(args.seed) + '_min_per_epoch.txt', 'w') as f:
+   909 1292.531 MiB    0.000 MiB           2                       f.writelines(str(epoch) + ': ' + str(np.round((etime - stime)/60, 3)) + ' minutes')
+   910                                         
+   911                                         
+   912 1292.531 MiB    0.000 MiB           1       etime = time.time()
+   913 1292.531 MiB    0.000 MiB           1       print('total time:' + str(etime - stime))
+   914 1292.531 MiB    0.000 MiB           1       print('delta loss:' + str(loss_vec[-1] - loss_vec[0]))

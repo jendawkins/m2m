@@ -199,6 +199,7 @@ def plot_orig_metab_tree(out_path=base_path + '/outputs', name='mets_in.pdf', in
     plt.close()
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-fun", "--fun", type = str)
     parser.add_argument("-name","--name", type = str)
