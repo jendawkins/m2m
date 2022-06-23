@@ -14,6 +14,9 @@ my_str_orig = '''
 #BSUB -o m2m.out
 #BSUB -e m2m.err
 
+rm *.err
+rm *.out
+
 # This is a sample script with specific resource requirements for the
 # **bigmemory** queue with 64GB memory requirement and memory
 # limit settings, which are both needed for reservations of
@@ -30,6 +33,9 @@ my_str_orig = '''
 # Please make a copy of this script for your own modifications
 
 #BSUB -q gpu
+#BSUB -M 64000
+#BSUB -R rusage[mem=64000]
+#BSUB -n 8
 
 # Some important variables to check (Can be removed later)
 echo '---PROCESS RESOURCE LIMITS---'
