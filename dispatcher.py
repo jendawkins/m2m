@@ -33,8 +33,8 @@ rm *.out
 # Please make a copy of this script for your own modifications
 
 #BSUB -q gpu
-#BSUB -M 64000
-#BSUB -R rusage[mem=64000]
+#BSUB -M 120000
+#BSUB -R rusage[mem=120000]
 #BSUB -n 8
 
 # Some important variables to check (Can be removed later)
@@ -81,7 +81,7 @@ args = parser.parse_args()
 param_dict = {('L', 'K'): [(10,10),(20,20),(30,30)], 'seed': [0,1,2,3,4],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
-              'iter': 60000,
+              'iter': 10000,
               'w_tau': [(-0.3, -3)],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
               # 'N_met': 153, 'N_bug': 97,
