@@ -770,7 +770,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             #            path_orig + 'seed' + str(args.seed) + '_checkpoint.tar')
 
         # at the last epoch, plot results
-        if epoch == last_epoch or epoch % np.int(last_epoch/3) == 0 or epoch == 0:
+        if epoch == last_epoch or epoch % 10000 == 0 or epoch == 0:
                 # or epoch%10000==0:
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
             if 'epoch' not in path:
