@@ -217,6 +217,9 @@ if __name__ == "__main__":
     #     print(len(args.feat))
     # print('')
     if args.out is not None:
+        if not os.path.isdir(args.out):
+            os.mkdir(args.out)
+
         if args.fun == 'dist':
             get_dist(args.feat, out_path=args.out, name=args.name, newick_path = args.newick)
         if args.fun == 'metab_orig':

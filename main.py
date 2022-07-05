@@ -812,10 +812,12 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
                         set(np.where(np.sum(best_alpha,1)!= 0)[0])))
                     active_met_clust = np.where(np.sum(best_z,0) != 0)[0]
+                    asv_df = {}
                     for asv_clust in active_asv_clust:
                         asv_ix = np.where(best_w[:,asv_clust]!= 0)[0]
                         if seqs is not None:
                             asv_ix = seqs[asv_ix]
+                        asv_df['Cluster ' + str(asv_clust)] = asv_ix
                         if not isinstance(asv_ix[0], str):
                             asv_ix = [str(a) for a in asv_ix]
                         inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree.pdf',
@@ -825,10 +827,12 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                         subprocess.run(inputs,cwd=base_path + "/ete_tree")
                     if len(active_met_clust) > 20:
                         active_met_clust = active_met_clust[:20]
+                    met_df = {}
                     for met_clust in active_met_clust:
                         met_ix = np.where(best_z[:, met_clust]!=0)[0]
                         if metabs is not None:
                             met_ix = metabs[met_ix]
+                        met_df['Cluster ' + str(met_clust)] = met_ix
                         if not isinstance(met_ix[0], str):
                             met_ix = [str(a) for a in met_ix]
                         inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree.pdf',
@@ -837,13 +841,10 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                         inputs.extend(met_ix)
                         subprocess.run(inputs,cwd=base_path + "/ete_tree")
 
-
-                if not os.path.isfile(path_orig + 'Num_Clusters.txt'):
-                    with open(path_orig + 'Num_Clusters.txt', 'w') as f:
-                        f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
-                else:
-                    with open(path_orig + 'Num_Clusters.txt', 'a') as f:
-                        f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
+                    temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
+                    temp.to_csv(path + str(args.seed) + 'mets_in_clusters.csv')
+                    temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in asv_df.items()]))
+                    temp.to_csv(path + str(args.seed) + 'asvs_in_clusters.csv')
 
                 if not os.path.isfile(path + 'Num_Clusters.txt'):
                     with open(path + 'Num_Clusters.txt', 'w') as f:
@@ -853,11 +854,11 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                         f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
 
 
-                if not os.path.isfile(path_orig + 'Loss.txt'):
-                    with open(path_orig + 'Loss.txt', 'w') as f:
+                if not os.path.isfile(path + 'Loss.txt'):
+                    with open(path + 'Loss.txt', 'w') as f:
                         f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec)) + '\n')
                 else:
-                    with open(path_orig + 'Loss.txt', 'a') as f:
+                    with open(path + 'Loss.txt', 'a') as f:
                         f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec))+ '\n')
 
                 # fig = plot_predictions(cluster_outputs, torch.Tensor(np.array(y)), param_dict[args.seed]['z'][best_mod])
@@ -867,7 +868,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     plot_loss_dict(path_orig, args.seed, loss_dict_vec)
                 except:
                     print('no loss dict')
-                plot_xvy(path, x, train_out_vec, best_mod, param_dict, args.seed)
+                xdict, ydict= plot_xvy(path, x, train_out_vec, best_mod, param_dict, args.seed)
                 if plot_params and args.load == 0:
                     plot_param_traces(path, param_dict[args.seed], params2learn, true_vals, net, args.seed)
                 fig3, ax3 = plt.subplots(figsize=(8, 8))
@@ -898,6 +899,10 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     pkl.dump(param_dict, f)
                 with open(path_orig + str(args.seed) + '_loss.pkl', 'wb') as f:
                     pkl.dump(loss_vec, f)
+                with open(path_orig + str(args.seed) + '_microbe_sum.pkl', 'wb') as f:
+                    pkl.dump(xdict, f)
+                with open(path_orig + str(args.seed) + '_met_clusters.pkl', 'wb') as f:
+                    pkl.dump(ydict, f)
 
                 with open(path_orig + 'seed' + str(args.seed) + '.txt', 'w') as f:
                     f.writelines(str(epoch))
@@ -936,7 +941,7 @@ if __name__ == "__main__":
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
     parser.add_argument("-hard", "--hard", help="whether or not to sample alpha and omega in the forward pass", type=int, default=0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 0)
+    parser.add_argument("-linear", "--linear", type = int, default = 1)
     parser.add_argument("-nltype", "--nltype", type = str, default = "exp")
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1)
     parser.add_argument("-l1", "--l1", type=int, default=0)
@@ -950,7 +955,7 @@ if __name__ == "__main__":
     parser.add_argument("-dtype", "--dtype", type=str, default='')
     parser.add_argument("-dim", "--dim", type=float, default=2)
     parser.add_argument("-syn", "--syn", type=int, default=0)
-    parser.add_argument("-yfile", "--yfile", type=str, default='y-95-5.csv')
+    parser.add_argument("-yfile", "--yfile", type=str, default='y_high_corr.csv')
     parser.add_argument("-gmm", "--gmm", type=int, default=0)
     args = parser.parse_args()
     print(sys.executable)
@@ -965,7 +970,7 @@ if __name__ == "__main__":
     if not gen_data:
         # args.case = args.case + '_100Bvar'
         calc_dim = True
-        xfile = 'x.csv'
+        xfile = 'x_high_corr.csv'
         yfile = args.yfile
         xdist_file = 'x_dist.csv'
         if '_' in dtype:
@@ -981,8 +986,28 @@ if __name__ == "__main__":
         if xfile not in os.listdir(data_path) or yfile not in os.listdir(data_path):
             load_data(base_path, xfile, yfile, dataLoader)
         x = pd.read_csv(data_path + '/' + xfile, index_col = [0])
-        y = pd.read_csv(data_path + '/' + yfile, index_col = [0])
+        if yfile not in os.listdir(data_path):
+            ml = metabLoader(non_zero_perc=int(yfile.split('-')[1]), meas_thresh=0,
+                             var_perc=int(yfile.split('-')[-1].split('.')[0]), week=1)
+            y = ml.data['x']
+            y.to_csv(data_path + '/' + yfile, index_col = 0)
+        else:
+            y = pd.read_csv(data_path + '/' + yfile, index_col = [0])
         y = y.loc[x.index.values]
+
+        if yfile.split('.')[0] + '-mvar.pkl' not in os.listdir(data_path):
+            ml = metabLoader(non_zero_perc=0, meas_thresh=0, var_perc=0, week=1)
+            raw_dat = ml.cdiff_dat
+            replicate_ixs = [d for d in raw_dat.index.values if not d.split('-')[1].split('.')[-1].isnumeric()]
+            repeat_dat = raw_dat[y.columns.values].loc[replicate_ixs]
+            y_raw = ml.data_ntr_filt['x']
+            rep_pts = [ix.split('-')[0] for ix in replicate_ixs]
+            unique_ixs = np.unique(rep_pts)
+            rep_list = [repeat_dat.loc[[ix for ix in replicate_ixs if ix.split('-')[0] == unique_ix]] for unique_ix in
+                        unique_ixs]
+            pooled_var = get_meas_var(y_raw, rep_list)
+            with open(data_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'wb') as f:
+                pkl.dump(pooled_var, f)
 
         with open(data_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'rb') as f:
             args.meas_var = pkl.load(f)

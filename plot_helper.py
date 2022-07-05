@@ -223,21 +223,21 @@ def plot_posterior(param_dict, seed, out_path):
         range = (np.array(all_dat1).flatten().min(), np.array(all_dat1).flatten().max())
 
         iterset = np.int(len(param_dict[seed][key])/4)
-        for i in np.arange(4):
-            posterior_list = param_dict[seed][key][start - iterset: start]
+        posterior_list = param_dict[seed][key][start - iterset: start]
 
-            try:
-                dat = np.concatenate(posterior_list)
-                dat = dat.flatten()
-            except:
-                dat = posterior_list
-            # dat = dat.detach().numpy().flatten()
+        try:
+            dat = np.concatenate(posterior_list)
+            dat = dat.flatten()
+        except:
+            dat = posterior_list
+        # dat = dat.detach().numpy().flatten()
 
-            ax.hist(dat, range = range, bins=20, label='Iterations ' + str(start - iterset) + ' to ' + str(start), alpha=0.5)
-            start = start - iterset
+        ax.hist(dat, range = range, bins=20, label='Iterations ' + str(start - iterset) + ' to ' + str(start), alpha=0.5)
         ax.legend()
         ax.set_title(key + ', ' + str(len(param_dict[seed][key])) + ' iterations')
-        fig.savefig(out_path + str(seed) + '-' + key + '-posterior_dist.pdf')
+        if not os.path.isdir(out_path + '/posteriors'):
+            os.mkdir(out_path + '/posteriors')
+        fig.savefig(out_path + '/posteriors/' + str(seed) + '-' + key + '-posterior_dist.pdf')
 
 def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
     fig_dict, ax_dict = {},{}
@@ -258,6 +258,13 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                     nn = 5
                 fig_dict[name], ax_dict[name] = plt.subplots(n, nn,
                                                              figsize = (5*nn, 4*n))
+            try:
+                dat = np.concatenate([p.flatten() for p in plist])
+            except:
+                dat = plist
+            mindat = np.min(dat)
+            maxdat = np.max(dat)
+
             for k in range(n):
                 if len(plist[0].squeeze().shape) <= 1:
                     if name == 'sigma' or name == 'p':
@@ -271,7 +278,7 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                                     tv = true_vals[name]
                                 ax_dict[name].plot([tv[k]] * len(trace), c='r', label='True')
                         ax_dict[name].set_title(name + ', ' + str(k))
-                        ax_dict[name].set_ylim(net.range_dict[name])
+                        ax_dict[name].set_ylim([0, maxdat])
                         ax_dict[name].legend(loc='upper right')
                         ax_dict[name].set_xlabel('Iterations')
                         ax_dict[name].set_ylabel('Parameter Values')
@@ -287,7 +294,7 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                                     ax_dict[name][k].plot([true_vals[name][k]] * len(trace), c='r', label='True')
                             ax_dict[name][k].set_title(name + ', ' + str(k))
                         if name in net.range_dict.keys():
-                            ax_dict[name][k].set_ylim(net.range_dict[name])
+                            ax_dict[name][k].set_ylim([mindat, maxdat])
                         ax_dict[name][k].legend(loc = 'upper right')
                         ax_dict[name][k].set_xlabel('Iterations')
                         ax_dict[name][k].set_ylabel('Parameter Values')
@@ -306,7 +313,7 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                                     ax_dict[name][k, j].plot([true_vals[name][k, j]] * len(trace), c='r', label='True')
                         ax_dict[name][k, j].set_title(name + ', ' + str(k) + ', ' + str(j))
                         if name in net.range_dict.keys():
-                            ax_dict[name][k, j].set_ylim(net.range_dict[name])
+                            ax_dict[name][k, j].set_ylim([mindat, maxdat])
                         ax_dict[name][k, j].legend(loc = 'upper right')
                         ax_dict[name][k, j].set_xlabel('Iterations')
                         ax_dict[name][k, j].set_ylabel('Parameter Values')
@@ -421,11 +428,11 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
         num_active_met = 1
     if num_active_microbe==0:
         num_active_microbe = 1
-    fig, ax = plt.subplots(num_active_microbe, num_active_met, figsize = (8*num_active_met,8*num_active_microbe))
-    if num_active_microbe==1:
-        ax = np.expand_dims(ax,0)
-    if num_active_met==1:
-        ax = np.expand_dims(ax,1)
+    # fig, ax = plt.subplots(num_active_microbe, num_active_met, figsize = (8*num_active_met,8*num_active_microbe))
+    # if num_active_microbe==1:
+    #     ax = np.expand_dims(ax,0)
+    # if num_active_met==1:
+    #     ax = np.expand_dims(ax,1)
     # ax_xlim = (np.min(true_sum.flatten())-10, np.max(true_sum.flatten())+10)
     # ax_ylim = (np.min(targets.flatten()), np.max(targets.flatten()))
 
@@ -443,35 +450,72 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
     #     ax_xlim = (np.min(microbe_sum.flatten()), ax_xlim[1])
     # ranges = [[np.max(microbe_sum[:,i]/out[:,j]) - np.min(microbe_sum[:,i]/out[:,j]) for i in range(out.shape[1])] for j in range(out.shape[1])]
     # ixs = [np.argmin(r) for r in ranges]
+    fit_df = {}
     active_microbes = np.where(np.sum(best_w,0)>1)[0]
     active_mets = np.where(np.sum(best_z, 0) > 1)[0]
     ii=0
+    x_dict = {}
+    y_dict = {}
     for i in active_mets:
         ixs = np.where(best_z[:,i]==1)[0]
         if len(ixs) == 0:
             continue
         jj = 0
+        if i not in y_dict.keys():
+            y_dict[i] = out[:, i]
         for j in active_microbes:
+
+            fig, ax = plt.subplots()
             ixs = np.where(best_w[:,j]>0.1)[0]
             if len(ixs) == 0 or best_alpha[j,i]<0.1:
                 continue
-            ax[jj,ii].scatter(microbe_sum[:, j], out[:, i], c = 'b', label = 'Guess')
-            ax[jj,ii].set_xlabel('Microbe sum')
-            ax[jj,ii].set_ylabel(r'$y_{i}$ when $i=$' + str(i))
-            ax[jj,ii].set_title('Metabolite Cluster ' + str(i) + ' vs Microbe Cluster ' + str(j))
-            ax[jj,ii].legend(loc = 'upper right')
-            slope = np.round((np.max(out[:,i]) - np.min(out[:, i]))/((np.max(microbe_sum[:,j]) - np.min(microbe_sum[:,j]))),3)
-            try:
-                ax[jj,ii].text(0.6, 0.8,'slope = ' + str(slope), horizontalalignment='center',
-                     verticalalignment='center', transform=ax[ii,jj].transAxes)
-            except:
-                return
+            ax.scatter(microbe_sum[:, j], out[:, i], c = 'b', label = 'Predicted')
+            if j not in x_dict.keys():
+                x_dict[j] = microbe_sum[:, j]
+
+            fit_df[(j, i)] = {}
+            ax.set_xlabel('Microbe sum')
+            ax.set_ylabel(r'$y_{i}$ when $i=$' + str(i))
+            # ax.set_title('Met Clust ' + str(i) + ' vs Microbe Clust ' + str(j) + '\n ')
+            ax.legend(loc = 'upper right')
+            lreg = st.linregress(microbe_sum[:, j], out[:, i])
+            ax.set_title('Met Clust ' + str(i) + ' vs Microbe Clust ' + str(j) +
+                         '\n r2= ' + str(np.round(lreg.rvalue,3)))
+            fit_df[(j,i)]['rvalue'] = lreg.rvalue
+            fit_df[(j,i)]['pvalue'] = lreg.pvalue
+            fit_df[(j,i)]['slope'] = lreg.slope
+            fit_df[(j,i)]['intercept'] = lreg.intercept
+            if not os.path.isdir(path + '/seed' + str(seed)):
+                os.mkdir(path + '/seed' + str(seed))
+            # if not os.path.isdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j)):
+            #     os.mkdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j))
+            fig.savefig(path + '/seed' + str(seed)+ '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j) + '-sum_x_v_y.png')
+            plt.close(fig)
+            # slope = np.round((np.max(out[:,i]) - np.min(out[:, i]))/((np.max(microbe_sum[:,j]) - np.min(microbe_sum[:,j]))),3)
+            # try:
+            #     ax[jj,ii].text(0.6, 0.8,'slope = ' + str(slope), horizontalalignment='center',
+            #          verticalalignment='center', transform=ax[ii,jj].transAxes)
+            # except:
+            #     return
             # ax[jj,ii].set_xlim(ax_xlim[0], ax_xlim[1])
             # ax[jj,ii].set_ylim(ax_ylim[0], ax_ylim[1])
             jj+=1
         ii+=1
+
+    pd.DataFrame(fit_df).T.to_csv(path + 'seed' + str(seed) + '-fit.csv')
+    df = pd.DataFrame(fit_df).T
+    if not os.path.isfile(path + 'rfit.txt'):
+        with open(path + 'perc-corr.txt', 'w') as f:
+            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
+                    str(np.round(np.std(df['rvalue']), 3)) + '\n')
+    else:
+        with open(path + 'perc-corr.txt', 'a') as f:
+            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
+                    str(np.round(np.std(df['rvalue']), 3)) + '\n')
+
     fig.savefig(path + 'seed' + str(seed) + '-sum_x_v_y.png')
     plt.close(fig)
+    return x_dict, y_dict
 
 def plot_output(path, best_mod, out_vec, targets, true_vals,
                 param_dict, fold, type = 'unknown', meas_var = 0.1, metabs = None):
