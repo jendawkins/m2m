@@ -32,7 +32,6 @@ rm *.out
 
 # Please make a copy of this script for your own modifications
 
-#BSUB -m bwhpath_hg
 #BSUB -q bigmem
 #BSUB -M 80000
 #BSUB -R rusage[mem=80000]
