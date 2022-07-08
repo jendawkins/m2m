@@ -32,6 +32,7 @@ rm *.out
 
 # Please make a copy of this script for your own modifications
 
+#BSUB -m bwhpath_hg
 #BSUB -q bigmem
 #BSUB -M 80000
 #BSUB -R rusage[mem=80000]
@@ -78,22 +79,38 @@ parser.add_argument("-case", "--case", help="case", type=str)
 args = parser.parse_args()
 
 
-param_dict = {('L', 'K'): [(10,10),(20,20),(30,30)], 'seed': [0,1,2,3,4],
+# param_dict = {('L', 'K'): [(10,10),(20,20),(30,30)], 'seed': [0,1,2,3,4],
+#               ('learn','priors'): [('all', 'all')],
+#               #'fix': ['sigma',''],
+#               'iter': 60000,
+#               'w_tau': [(-0.3, -3)],
+#               'a_tau': [(-0.3, -3)], 'gmm': [0],
+#               # 'N_met': 153, 'N_bug': 97,
+#               # 'N_samples': 48,
+#               'lr': [0.1,0.01,0.001], 'meas_var': 0.108,
+#               'linear': [0],
+#               'syn': 0,
+#               'load': 1, 'hard': [0],
+#               'lm': [0], 'lb': [0], 'adjust_lr': [1], 'locs': ['none'],
+#               'yfile': ['y_high_corr.csv']
+#               }
+
+param_dict = {('L', 'K'): [(3,3), (6,6)], 'seed': [0,1,2],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
-              'iter': 60000,
+              'iter': 50000,
               'w_tau': [(-0.3, -3)],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
-              # 'N_met': 153, 'N_bug': 97,
-              # 'N_samples': 48,
-              'lr': [0.1,0.01,0.001], 'meas_var': 0.108,
-              'linear': [0],
-              'syn': 0,
-              'load': 1, 'hard': [0],
-              'lm': [0], 'lb': [0], 'adjust_lr': [1], 'locs': ['none'],
+              'N_met': 20, 'N_bug': 15,
+              'N_samples': 1000,
+              'lr': [0.1,0.01, 0.001], 'meas_var': 0.108,
+              'syn': 1,
+              'load': 0, 'linear': 0, 'nltype': ['exp','sine','sigmoid'],
+              'hard': [0,1],
+              'lm': [0,1], 'lb': [0,1], 'adjust_lr': [1],
+              'locs': ['none'],
               'yfile': ['y_high_corr.csv']
               }
-
 
 
 

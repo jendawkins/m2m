@@ -248,7 +248,6 @@ class Model(nn.Module):
         # based on parameter size
         # Also, get the expected range of the parameter for plotting purposes (the expected parameter range is use when
         # plotting parameter traces that are nicer and easier to interpret / compare between different model runs)
-        self.range_dict = {} # stores ranges for plotting purposes
         self.lr_range = {} # stores ranges for adjusting the learning rate based on parameter size
         for param, dist in self.distributions.items():
             sampler = dist.sample([1000])
@@ -264,24 +263,18 @@ class Model(nn.Module):
             # we sample from the Gamma dist but then take the log of the inverse
             if 'r_met' in param or 'r_bug' in param:
                 vals = np.log(1/self.distributions[param].sample([1000]))
-                self.range_dict[param] = (-0.1, np.exp(vals.max()))
                 self.lr_range[param] = torch.abs((torch.mean(vals) + torch.std(vals)) - (torch.mean(vals) - torch.std(vals)))
             elif 'w' in param or 'z' in param or 'alpha' in param:
-                self.range_dict[param] = (-0.1,1.1)
                 self.lr_range[param] = np.abs(2*(torch.log(torch.tensor(self.params[param]['loc']).float())/self.params[param]['temp']))
             elif param == 'pi_met' or param == 'e_met' or param == 'sigma':
                 vals = torch.log(sampler)
                 self.lr_range[param] = torch.abs((torch.mean(vals) + torch.std(vals)) - (torch.mean(vals) - torch.std(vals)))
                 range = sampler.max() - sampler.min()
-                self.range_dict[param] = (sampler.min() - range * 0.1, sampler.max() + range * 0.1)
             else:
                 vals = dist.sample([1000])
                 range = sampler.max() - sampler.min()
-                self.range_dict[param] = (sampler.min() - range * 0.1, sampler.max() + range * 0.1)
                 self.lr_range[param] = torch.abs((torch.mean(vals) + torch.std(vals)) - (torch.mean(vals) - torch.std(vals)))
-        self.range_dict['beta'] = (-20,20)
-        self.range_dict['beta[1:,:]*alpha'] = self.range_dict['beta']
-        self.range_dict['z'] = (-0.1,1.1)
+
 
 
     # Initialize parameter values
@@ -491,11 +484,10 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             nl_type = args.nltype, dist_var_frac=args.dist_var_perc, embedding_dim=args.dim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
-        try:
+        if args.linear == 1:
             plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
                           r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
-        except:
-            print('no plots of gen data')
+
 
         if ylocs is None:
             a_met = None
@@ -887,13 +879,6 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                            'epoch': epoch}
                 torch.save(save_dict,
                            path_orig + 'seed' + str(args.seed) + '_checkpoint.tar')
-                if 'beta' in param_dict[args.seed].keys():
-                    with open(path + 'seed' + str(args.seed) + '_beta.txt', 'w') as f:
-                        f.writelines(str(param_dict[args.seed]['beta'][best_mod]) + '\n')
-
-                if 'beta[1:,:]*alpha' in param_dict[args.seed].keys():
-                    with open(path + 'seed' + str(args.seed) + '_beta-alpha.txt', 'w') as f:
-                        f.writelines(str(param_dict[args.seed]['beta[1:,:]*alpha'][best_mod]) + '\n')
 
                 with open(path_orig + str(args.seed) + '_param_dict.pkl', 'wb') as f:
                     pkl.dump(param_dict, f)

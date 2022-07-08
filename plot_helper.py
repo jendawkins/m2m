@@ -416,6 +416,7 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
     best_w = param_dict[seed]['w'][best_mod]
     best_z = param_dict[seed]['z'][best_mod]
     best_alpha = param_dict[seed]['alpha'][best_mod]
+    best_beta = param_dict[seed]['beta'][best_mod]
 
     # out = out[:, mapping['met']]
     microbe_sum = x.detach().numpy() @ best_w
@@ -485,6 +486,9 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             fit_df[(j,i)]['pvalue'] = lreg.pvalue
             fit_df[(j,i)]['slope'] = lreg.slope
             fit_df[(j,i)]['intercept'] = lreg.intercept
+            fit_df[(i,j)]['beta'] = np.round(best_beta[j+1, i],3)
+            fit_df[(i, j)]['alpha'] = np.round(best_alpha[j, i],3)
+            fit_df[(i,j)]['alpha*beta']= np.round(best_beta[j+1, i]*best_alpha[j, i],3)
             if not os.path.isdir(path + '/seed' + str(seed)):
                 os.mkdir(path + '/seed' + str(seed))
             # if not os.path.isdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j)):
@@ -505,11 +509,11 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
     pd.DataFrame(fit_df).T.to_csv(path + 'seed' + str(seed) + '-fit.csv')
     df = pd.DataFrame(fit_df).T
     if not os.path.isfile(path + 'rfit.txt'):
-        with open(path + 'perc-corr.txt', 'w') as f:
+        with open(path + '-avg-rho.txt', 'w') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
                     str(np.round(np.std(df['rvalue']), 3)) + '\n')
     else:
-        with open(path + 'perc-corr.txt', 'a') as f:
+        with open(path + '-avg-rho.txt', 'a') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
                     str(np.round(np.std(df['rvalue']), 3)) + '\n')
 
