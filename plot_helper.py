@@ -293,8 +293,8 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                                 if np.array(true_vals[name]).shape[0] > k:
                                     ax_dict[name][k].plot([true_vals[name][k]] * len(trace), c='r', label='True')
                             ax_dict[name][k].set_title(name + ', ' + str(k))
-                        if name in net.range_dict.keys():
-                            ax_dict[name][k].set_ylim([mindat, maxdat])
+                        # if name in net.range_dict.keys():
+                        ax_dict[name][k].set_ylim([mindat, maxdat])
                         ax_dict[name][k].legend(loc = 'upper right')
                         ax_dict[name][k].set_xlabel('Iterations')
                         ax_dict[name][k].set_ylabel('Parameter Values')
@@ -312,8 +312,8 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
                                 if np.array(true_vals[name]).shape[1]>j and np.array(true_vals[name]).shape[0] > k:
                                     ax_dict[name][k, j].plot([true_vals[name][k, j]] * len(trace), c='r', label='True')
                         ax_dict[name][k, j].set_title(name + ', ' + str(k) + ', ' + str(j))
-                        if name in net.range_dict.keys():
-                            ax_dict[name][k, j].set_ylim([mindat, maxdat])
+                        # if name in net.range_dict.keys():
+                        ax_dict[name][k, j].set_ylim([mindat, maxdat])
                         ax_dict[name][k, j].legend(loc = 'upper right')
                         ax_dict[name][k, j].set_xlabel('Iterations')
                         ax_dict[name][k, j].set_ylabel('Parameter Values')
@@ -486,9 +486,12 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             fit_df[(j,i)]['pvalue'] = lreg.pvalue
             fit_df[(j,i)]['slope'] = lreg.slope
             fit_df[(j,i)]['intercept'] = lreg.intercept
-            fit_df[(i,j)]['beta'] = np.round(best_beta[j+1, i],3)
+            try:
+                fit_df[(i,j)]['beta'] = np.round(best_beta[j+1, i],3)
+                fit_df[(i, j)]['alpha*beta'] = np.round(best_beta[j + 1, i] * best_alpha[j, i], 3)
+            except:
+                continue
             fit_df[(i, j)]['alpha'] = np.round(best_alpha[j, i],3)
-            fit_df[(i,j)]['alpha*beta']= np.round(best_beta[j+1, i]*best_alpha[j, i],3)
             if not os.path.isdir(path + '/seed' + str(seed)):
                 os.mkdir(path + '/seed' + str(seed))
             # if not os.path.isdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j)):
@@ -638,7 +641,11 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
             f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
 
     num_mets = preds.shape[1]
-    fig, ax = plt.subplots(8,1,figsize = (np.int(num_mets/37)*2,8))
+    if np.int(num_mets/37) < 1:
+        val = 1
+    else:
+        val = np.int(num_mets/37)
+    fig, ax = plt.subplots(8,1,figsize = (val*2,8))
     for s in range(8):
         ax[s].bar(np.arange(preds.shape[1]), preds[s,:].flatten().detach().numpy(), width = 0.85, alpha= 0.5, label = 'Predicted')
         ax[s].bar(np.arange(targets.shape[1]), targets[s, :].flatten(), width=0.85, alpha = 0.5, label = 'True')
