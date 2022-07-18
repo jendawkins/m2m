@@ -121,15 +121,18 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
     fig2.savefig(path + 'cluster_histogram.png')
     plt.close(fig2)
 
-    bug_active,met_active = np.where((gen_alpha * gen_beta[1:,:])>= 1e-6)
+    try:
+        bug_active,met_active = np.where((gen_alpha * gen_beta[1:,:])>= 1e-6)
+    except:
+        bug_active, met_active = np.where((gen_alpha) >= 1e-6)
 
     K = gen_z.shape[1]
     L = gen_u.shape[1]
     fig, ax = plt.subplots(len(bug_active), 1, figsize=(8, 8 * len(bug_active)))
     ii = 0
     # g = x @ gen_u
-    ax_ylim = (np.min(y.flatten()) - 0.01 * np.max(y.flatten()), np.max(y.flatten()) + 0.01 * np.max(y.flatten()))
-    ax_xlim = (np.min(g.flatten()) - 0.01 * np.max(g.flatten()), np.max(g.flatten()) + 0.01 * np.max(g.flatten()))
+    # ax_ylim = (np.min(y.flatten()) - 0.01 * np.max(y.flatten()), np.max(y.flatten()) + 0.01 * np.max(y.flatten()))
+    # ax_xlim = (np.min(g.flatten()) - 0.01 * np.max(g.flatten()), np.max(g.flatten()) + 0.01 * np.max(g.flatten()))
     for bug_clust, met_clust in zip(bug_active, met_active):
         ixs = np.where(gen_z[:, met_clust] == 1)[0]
         for ix in ixs:
@@ -140,11 +143,13 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         slope = np.round((np.max(y[:, ixs[0]]) - np.min(y[:, ixs[0]])) / ((np.max(g[:, bug_clust]) - np.min(g[:, bug_clust]))), 3)
         ax[ii].text(0.6, 0.8, 'slope = ' + str(slope), horizontalalignment='center',
                       verticalalignment='center', transform=ax[ii].transAxes)
-        ax[ii].text(0.6, 0.6, 'beta = ' + str(gen_beta[bug_clust + 1, met_clust]), horizontalalignment='center',
-                      verticalalignment='center', transform=ax[ii].transAxes)
-        ax[ii].set_xlim(ax_xlim)
-        # ax[ii].set_ylim(ax_ylim)
+        # ax[ii].set_xlim(ax_xlim)
         ii += 1
+        try:
+            ax[ii].text(0.6, 0.6, 'beta = ' + str(gen_beta[bug_clust + 1, met_clust]), horizontalalignment='center',
+                          verticalalignment='center', transform=ax[ii].transAxes)
+        except:
+            continue
     fig.tight_layout()
     fig.savefig(path + '-sum_x_v_y.png')
     plt.close(fig)
@@ -321,7 +326,7 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
             fig_dict[name].savefig(path + 'seed' + str(fold) + '_' + name + '_parameter_trace.png')
             plt.close(fig_dict[name])
 
-def plot_locations(radii, means, locs, gps, name = 'bug'):
+def plot_locations(path, radii, means, locs, gps, name = 'bug'):
     colors = cm.rainbow(np.linspace(0, 1, len(gps)))
     fig, ax = plt.subplots(figsize = (10,10))
     # handles = []
@@ -339,7 +344,7 @@ def plot_locations(radii, means, locs, gps, name = 'bug'):
         # handles.append(p)
     # ax.legend(handles, gps, prop = {'size': 3})
     fig.tight_layout()
-    fig.savefig(name + '-init-locs.pdf')
+    fig.savefig(path + '/' + name + '-init-locs.pdf')
     plt.close(fig)
 
 
@@ -481,23 +486,25 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             ax.legend(loc = 'upper right')
             lreg = st.linregress(microbe_sum[:, j], out[:, i])
             ax.set_title('Met Clust ' + str(i) + ' vs Microbe Clust ' + str(j) +
-                         '\n r2= ' + str(np.round(lreg.rvalue,3)))
+                         '\n r2= ' + str(np.round(lreg.rvalue**2,3)))
             fit_df[(j,i)]['rvalue'] = lreg.rvalue
             fit_df[(j,i)]['pvalue'] = lreg.pvalue
             fit_df[(j,i)]['slope'] = lreg.slope
             fit_df[(j,i)]['intercept'] = lreg.intercept
-            try:
-                fit_df[(i,j)]['beta'] = np.round(best_beta[j+1, i],3)
-                fit_df[(i, j)]['alpha*beta'] = np.round(best_beta[j + 1, i] * best_alpha[j, i], 3)
-            except:
-                continue
-            fit_df[(i, j)]['alpha'] = np.round(best_alpha[j, i],3)
+
+            fit_df[(j,i)]['alpha'] = np.round(best_alpha[j, i],3)
             if not os.path.isdir(path + '/seed' + str(seed)):
                 os.mkdir(path + '/seed' + str(seed))
             # if not os.path.isdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j)):
             #     os.mkdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j))
             fig.savefig(path + '/seed' + str(seed)+ '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j) + '-sum_x_v_y.png')
             plt.close(fig)
+
+            try:
+                fit_df[(j,i)]['beta'] = np.round(best_beta[j+1, i],3)
+                fit_df[(j,i)]['alpha*beta'] = np.round(best_beta[j + 1, i] * best_alpha[j, i], 3)
+            except:
+                continue
             # slope = np.round((np.max(out[:,i]) - np.min(out[:, i]))/((np.max(microbe_sum[:,j]) - np.min(microbe_sum[:,j]))),3)
             # try:
             #     ax[jj,ii].text(0.6, 0.8,'slope = ' + str(slope), horizontalalignment='center',
@@ -520,8 +527,6 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
                     str(np.round(np.std(df['rvalue']), 3)) + '\n')
 
-    fig.savefig(path + 'seed' + str(seed) + '-sum_x_v_y.png')
-    plt.close(fig)
     return x_dict, y_dict
 
 def plot_output(path, best_mod, out_vec, targets, true_vals,

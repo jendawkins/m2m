@@ -9,11 +9,13 @@ import re
 from data_gen import *
 import sys
 from dataLoader import *
-import datetime
+
 import subprocess
 from sklearn.cluster import KMeans
 import scipy
 from torch.distributions.half_normal import HalfNormal
+from safariLoader import *
+import datetime
 
 
 # from tree_plotter import plot_asv_tree, plot_orig_metab_tree, plot_metab_tree
@@ -316,11 +318,21 @@ class Model(nn.Module):
             # self.r_bug = nn.Parameter(torch.log(1.2*temp*torch.ones(self.L)), requires_grad=True)
             kappa = torch.stack([((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1) for m in
                                  range(self.microbe_locs.shape[0])])
-            self.w_act = torch.sigmoid((self.r_bug - kappa))
+            self.w = (self.r_bug - kappa)
+            if 'w' in self.compute_loss_for:
+                self.compute_loss_for.remove('w')
+            # self.w_act = torch.sigmoid((self.r_bug - kappa))
         else:
             self.w = nn.Parameter(Normal(0,1).sample([self.N_bug, self.L]), requires_grad=True)
+            # self.w_act = torch.sigmoid(self.w / self.omega_temp)
+
+        if self.sample_w:
+            omega_epsilon = self.omega_temp / 4
+            self.w_soft, self.w_act = gumbel_sigmoid(self.w, self.omega_temp, omega_epsilon)
+        else:
             self.w_act = torch.sigmoid(self.w / self.omega_temp)
 
+        self.w_loc = 0.1
         # Initialize the metabolite cluster means and radii
         if self.met_locs is not None:
             if self.met_class is not None:
@@ -484,19 +496,17 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             nl_type = args.nltype, dist_var_frac=args.dist_var_perc, embedding_dim=args.dim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
-        if args.linear == 1:
-            plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+        # if args.linear == 1:
+        plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
                           r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
+        # else:
+            # syn_data_dict = {}
+            # plot_locations(path, r_bug, mu_bug, gen_bug_locs, )
 
-
-        if ylocs is None:
-            a_met = None
-        else:
+        if a_met is not None:
             a_met = gen_met_locs
 
-        if xlocs is None:
-            a_bug = None
-        else:
+        if a_bug is not None:
             a_bug = gen_bug_locs
 
         # get true values from data_gen.py to compare to learned parameter values
@@ -538,6 +548,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     net.initialize(args.seed)
     net.to(device)
 
+    print(net.compute_loss_for)
     # setattr(net, 'w', nn.Parameter(torch.zeros(net.w.shape), requires_grad=False))
 
     # plot prior distributions for all parameters
@@ -605,8 +616,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                   "-out", path + '/init_clusters/', "-newick", base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
                   "-feat"]
         inputs.extend(asv_ix)
-        print(inputs)
-        subprocess.run(inputs, cwd=base_path + "/ete_tree")
+        # print(inputs)
+        if args.safari == 0 and args.syn == 0:
+            subprocess.run(inputs, cwd=base_path + "/ete_tree")
     for met_clust in active_met_clust:
         met_ix = np.where(best_z[:, met_clust] != 0)[0]
         if metabs is not None:
@@ -616,7 +628,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree_init.pdf',
                   "-out", path + '/init_clusters/', "-newick", base_path + '/ete_tree/w1_newick_tree.nhx', "-feat"]
         inputs.extend(met_ix)
-        subprocess.run(inputs, cwd=base_path + "/ete_tree")
+        if args.safari == 0 and args.syn == 0:
+            subprocess.run(inputs, cwd=base_path + "/ete_tree")
 
     if a_met is not None and args.xdim == 2 and args.ydim == 2:
         plot_output_locations(path, net, 0, param_dict[args.seed], args.seed, plot_zeros=1)
@@ -762,7 +775,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             #            path_orig + 'seed' + str(args.seed) + '_checkpoint.tar')
 
         # at the last epoch, plot results
-        if epoch == last_epoch or epoch % 10000 == 0 or epoch == 0:
+        if epoch == last_epoch or epoch % 5000 == 0 or epoch == 0:
                 # or epoch%10000==0:
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
             if 'epoch' not in path:
@@ -799,6 +812,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     pd.DataFrame(param_dict[args.seed]['alpha'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'alpha.csv')
                     pd.DataFrame(param_dict[args.seed]['w'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'omega.csv')
 
+                if args.syn:
+                    plot_output_locations(path, net, best_mod, param_dict[args.seed], args.seed, plot_zeros = False)
                 if not args.syn:
                     met_newick_name = 'newick_' + args.yfile.split('.csv')[0] + '.nhx'
                     active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
@@ -816,7 +831,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                              "-out", path + 'seed' + str(args.seed) + '-clusters/',
                                   "-newick",base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx', "-feat"]
                         inputs.extend(asv_ix)
-                        subprocess.run(inputs,cwd=base_path + "/ete_tree")
+                        if args.safari == 0 and args.syn == 0:
+                            subprocess.run(inputs,cwd=base_path + "/ete_tree")
                     if len(active_met_clust) > 20:
                         active_met_clust = active_met_clust[:20]
                     met_df = {}
@@ -831,7 +847,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                              "-out", path+ 'seed' + str(args.seed) + '-clusters/',
                                   "-newick", base_path + '/ete_tree/' + met_newick_name,"-feat"]
                         inputs.extend(met_ix)
-                        subprocess.run(inputs,cwd=base_path + "/ete_tree")
+                        if args.safari == 0 and args.syn == 0:
+                            subprocess.run(inputs,cwd=base_path + "/ete_tree")
 
                     temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
                     temp.to_csv(path + str(args.seed) + 'mets_in_clusters.csv')
@@ -910,14 +927,15 @@ if __name__ == "__main__":
     parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.1)
     parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+')
     parser.add_argument("-priors", "--priors", help="priors to set", type=str, nargs='+', default = 'all')
-    parser.add_argument("-case", "--case", help="case", type=str, default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
+    parser.add_argument("-case", "--case", help="case", type=str,
+                        default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
     # parser.add_argument("-case", "--case", help="case", type=str,
     #                     default='mixture_model')
-    parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 30)
-    parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 30)
-    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 10)
-    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 10)
-    parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.001)
+    parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 10)
+    parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 10)
+    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 3)
+    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 3)
+    parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
     parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
     parser.add_argument("-load", "--load", help="0 to not load model, 1 to load model", type=int, default = 0)
@@ -926,7 +944,7 @@ if __name__ == "__main__":
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
     parser.add_argument("-hard", "--hard", help="whether or not to sample alpha and omega in the forward pass", type=int, default=0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 1)
+    parser.add_argument("-linear", "--linear", type = int, default = 0)
     parser.add_argument("-nltype", "--nltype", type = str, default = "exp")
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1)
     parser.add_argument("-l1", "--l1", type=int, default=0)
@@ -936,23 +954,49 @@ if __name__ == "__main__":
     parser.add_argument("-ydim", "--ydim", type=int, default=2)
     parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.3, -3])
     parser.add_argument("-w_tau", "--w_tau", type=float, nargs='+', default=[-0.3, -3])
-    parser.add_argument("-locs","--locs", type = str, default = 'none')
+    parser.add_argument("-locs","--locs", type = str, default = 'true')
     parser.add_argument("-dtype", "--dtype", type=str, default='')
     parser.add_argument("-dim", "--dim", type=float, default=2)
     parser.add_argument("-syn", "--syn", type=int, default=0)
     parser.add_argument("-yfile", "--yfile", type=str, default='y_high_corr.csv')
     parser.add_argument("-gmm", "--gmm", type=int, default=0)
+    parser.add_argument("-safari", "--safari", type=int, default=1)
+    parser.add_argument("-saf_type", "--saf_type", type=str, default='polar')
+    parser.add_argument("-most_corr", "--most_corr", type=int, default = 1)
     args = parser.parse_args()
     print(sys.executable)
     args.case = args.locs + '_' + args.case
     dtype = args.dtype
     base_path = os.getcwd()
+    if '/M2M' not in base_path:
+        base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
     if not os.path.isdir(base_path + '/outputs/'):
         os.mkdir(base_path + '/outputs/')
     if not os.path.isdir(base_path + '/outputs/' + args.case):
         os.mkdir(base_path + '/outputs/' + args.case)
     gen_data = args.syn==1
-    if not gen_data:
+    if args.safari==1 and args.syn==0:
+        met_dict, asv_dict, res_dict = load_safari_data(met_frac = 0.9, bug_frac = 0.15)
+        y = met_dict[args.saf_type]['log_std_filt']
+        x = asv_dict['ra_filt']
+        if args.most_corr:
+            df = pd.DataFrame(res_dict[args.saf_type]).T
+            pairs = df.index.values[df['rho'] > 0.5]
+            metabs, microbes = list(zip(*pairs))
+            y = y[set(metabs)]
+            x = x[set(microbes)]
+
+        x = (x.T/np.sum(x,1)).T
+
+        y = y.loc[x.index.values]
+        args.meas_var = 0.1
+        args.locs = 'none'
+        args.N_met = y.shape[1]
+        args.N_bug = x.shape[1]
+        args.N_samples = y.shape[0]
+        ylocs, xlocs, y_class, x_fams = None, None, None, None
+
+    elif not gen_data:
         # args.case = args.case + '_100Bvar'
         calc_dim = True
         xfile = 'x_high_corr.csv'
@@ -1061,7 +1105,10 @@ if __name__ == "__main__":
             xlocs, ylocs = None, None
             x_fams, y_class = None, None
     else:
-        x,y,ylocs,xlocs,y_class,x_fams = None, None, None, None, None, None
+        if args.locs == 'none':
+            x,y,ylocs,xlocs,y_class,x_fams = None, None, None, None, None, None
+        else:
+            x, y, ylocs, xlocs, y_class, x_fams = None, None, True, True, None, None
         # args.N_samples = 49
 
 

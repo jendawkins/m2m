@@ -7,33 +7,56 @@ import time
 import numpy as np
 
 
-max_load = 6
+# max_load = 4
 base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
 parser = argparse.ArgumentParser()
 parser.add_argument("-case", "--case", help="case", type=str)
 parser.add_argument("-syn", "--syn", help="use synthetic data or not", type=int)
+parser.add_argument("-max_load", "--max_load", help="max_load", type=int, default = 4)
 args = parser.parse_args()
 
+max_load = args.max_load
 
-param_dict = {('L', 'K'): [(3,3), (6,6)], 'seed': [0,1,2],
+param_dict = {('L', 'K'): [(30,30), (20,20)], 'seed': [0,1,2],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
-              'iter': 50000,
+              'iter': 30000,
               'w_tau': [(-0.3, -3)],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
-              'N_met': 20, 'N_bug': 15,
-              'N_samples': 1000,
-              'lr': [0.1,0.01, 0.001], 'meas_var': 0.108,
-              'syn': 1,
-              'load': 0, 'linear': 0, 'nltype': ['exp','sin','sigmoid'],
-              'hard': [0,1],
-              'lm': [0,1], 'lb': [0,1], 'adjust_lr': [1],
+              # 'N_met': 20, 'N_bug': 15,
+              # 'N_samples': 1000,
+              'lr': [0.1,0.01, 0.001], 'meas_var': 0.10,
+              'syn': 0,
+              'load': 0, 'linear': 1,
+              # 'nltype': ['exp','sin','sigmoid', 'poly'],
+              'hard': [0],
+              'lm': [0], 'lb': [0], 'adjust_lr': [1],
               'locs': ['none'],
-              'yfile': ['y_high_corr.csv']
+              # 'yfile': ['y_high_corr.csv'],
+              'case': 'safari',
+              'safari': 1, 'most_corr': [0,1], 'saf_type': ['polar', 'lipids-pos', 'lipids-neg']
               }
 
 
-
+param_dict = {('L', 'K'): [(3,3), (4,4)], 'seed': [0,1,2],
+              ('learn','priors'): [('all', 'all')],
+              #'fix': ['sigma',''],
+              'iter': 10000,
+              'w_tau': [(-0.01, -1)],
+              'a_tau': [(-0.3, -3)], 'gmm': [0],
+              'N_met': 20, 'N_bug': 15,
+              'N_samples': 1000,
+              'lr': [0.1,0.01, 0.001], 'meas_var': 0.10,
+              'syn': 1,
+              'load': 0, 'linear': 0,
+              'nltype': ['exp','sin','sigmoid', 'poly'],
+              'hard': [0],
+              'lm': [0], 'lb': [0], 'adjust_lr': [1],
+              'locs': ['true'],
+              # 'yfile': ['y_high_corr.csv'],
+              'case': 'non-linear-2', 'safari': 0,
+              # 'safari': 1, 'most_corr': [0,1], 'saf_type': ['polar', 'lipids-pos', 'lipids-neg']
+              }
 
 total_iters = np.prod([len(v) for v in param_dict.values() if hasattr(v, '__len__') and not isinstance(v, str)])
 print(total_iters)

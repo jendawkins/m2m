@@ -141,7 +141,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     for j in range(N_met):
         k = np.argmax(z_gen[j,:])
         if not linear:
-            # g = (g - np.mean(g,0))/np.std(g-np.mean(g,0))
+            g = (g - np.mean(g,0))/np.std(g-np.mean(g,0))
             if nl_type == 'exp':
                 y[:, j] = np.random.normal(betas[0, k] + np.exp(g) @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
             if nl_type == 'sigmoid':
@@ -171,10 +171,10 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
 
 
 if __name__ == "__main__":
-    N_bug = 97
-    N_met = 362
-    K=10
-    L=10
+    N_bug = 15
+    N_met = 20
+    K=3
+    L=3
     dist_var_perc = 10
     n_local_clusters = 1
     cluster_per_met_cluster = 0
@@ -185,16 +185,16 @@ if __name__ == "__main__":
     repeat_clusters = 0
     cluster_std = 1
 
-    meas_var = 0.1
+    meas_var = 0.01
     if not os.path.isdir(orig_path + 'mvar_' + str(meas_var).replace('.','-')):
         os.mkdir(orig_path + 'mvar_' + str(meas_var).replace('.','-'))
     # for cluster_std in [1,3,6,10,12,100]:
-    x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
-    mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
-        N_met=N_met, N_bug=N_bug, N_met_clusters=1,
-        N_bug_clusters=L, meas_var=meas_var,
-        repeat_clusters=0, N_samples=48, linear=1,
-        nl_type='linear', dist_var_frac=2, cluster_std=cluster_std)
+    # x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+    # mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
+    #     N_met=N_met, N_bug=N_bug, N_met_clusters=1,
+    #     N_bug_clusters=L, meas_var=meas_var,
+    #     repeat_clusters=0, N_samples=48, linear=1,
+    #     nl_type='linear', dist_var_frac=2, cluster_std=cluster_std)
 
     # plt.figure()
     # for c_ix in np.arange(gen_z.shape[1]):
@@ -204,9 +204,9 @@ if __name__ == "__main__":
     # plt.title('Cluster STD: ' + str(cluster_std))
     # plt.show()
 
-    plot_syn_data(orig_path + 'mvar_' + str(meas_var).replace('.','-') + '/' +
-                  str(cluster_std), x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
-                  r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
+    # plot_syn_data(orig_path + 'mvar_' + str(meas_var).replace('.','-') + '/' +
+    #               str(cluster_std), x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+    #               r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
     #
     # for meas_var in [0.001,1,10,100]:
     #     x, y, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
@@ -226,26 +226,26 @@ if __name__ == "__main__":
     #                   r_bug, mu_met, r_met, gen_u)
 
 
-    # for type in ['poly','sin','exp','sigmoid']:
-    #     x, y, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
-    #     mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
-    #         N_met=N_met, N_bug=N_bug, N_met_clusters=K, N_local_clusters=n_local_clusters, N_bug_clusters=L,
-    #         meas_var=meas_var, repeat_clusters=False,
-    #         N_samples=1000,deterministic = True, linear = False, nl_type = type)
-    #
-    #     fig, ax = plt.subplots(K, L, figsize=(8 * L, 8 * K))
-    #     # ranges = [[np.max(microbe_sum[:,i]/out[:,j]) - np.min(microbe_sum[:,i]/out[:,j]) for i in range(out.shape[1])] for j in range(out.shape[1])]
-    #     # ixs = [np.argmin(r) for r in ranges]
-    #     g = x@gen_w
-    #     for i in range(K):
-    #         ixs = np.where(gen_z[:,i]==1)[0]
-    #         for j in range(L):
-    #             # ax[i].scatter(microbe_sum[:,ixs[i]], out[:,i])
-    #             for ii in ixs:
-    #                 ax[i, j].scatter(g[:, j], y[:, ii])
-    #             ax[i, j].set_xlabel('Microbe sum')
-    #             ax[i, j].set_ylabel(r'$y_{i}$ when $i=$' + str(i))
-    #             ax[i, j].set_title('Metabolite Cluster ' + str(i) + ' vs Microbe Cluster ' + str(j))
-    #     fig.tight_layout()
-    #     fig.savefig(orig_path + type +  '-sum_x_v_y.pdf')
-    #     plt.close(fig)
+    for type in ['poly','sin','exp','sigmoid']:
+        x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+        mu_met, r_bug, r_met, gen_u = generate_synthetic_data(N_met=N_met, N_bug=N_bug, N_met_clusters=K,
+        N_bug_clusters=L, meas_var=meas_var,
+        repeat_clusters=0, N_samples=1000, linear = False, nl_type=type,
+        cluster_std=cluster_std)
+
+        fig, ax = plt.subplots(K, L, figsize=(8 * L, 8 * K))
+        # ranges = [[np.max(microbe_sum[:,i]/out[:,j]) - np.min(microbe_sum[:,i]/out[:,j]) for i in range(out.shape[1])] for j in range(out.shape[1])]
+        # ixs = [np.argmin(r) for r in ranges]
+        g = x@gen_w
+        for i in range(K):
+            ixs = np.where(gen_z[:,i]==1)[0]
+            for j in range(L):
+                # ax[i].scatter(microbe_sum[:,ixs[i]], out[:,i])
+                for ii in ixs:
+                    ax[i, j].scatter(g[:, j], y[:, ii])
+                ax[i, j].set_xlabel('Microbe sum')
+                ax[i, j].set_ylabel(r'$y_{i}$ when $i=$' + str(i))
+                ax[i, j].set_title('Metabolite Cluster ' + str(i) + ' vs Microbe Cluster ' + str(j))
+        fig.tight_layout()
+        fig.savefig(orig_path + type +  '-sum_x_v_y.pdf')
+        plt.close(fig)
