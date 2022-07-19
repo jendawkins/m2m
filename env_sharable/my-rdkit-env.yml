@@ -1,0 +1,17 @@
+name: my-rdkit-env
+channels:
+  - soumith
+  - defaults
+  - conda-forge
+dependencies:
+  - rdkit
+  - scipy
+  - scikit-learn
+  - openpyxl
+  - jupyter
+  - seaborn
+  - pubchempy
+  - treelib
+  - networkx
+  - scikit-bio
+prefix: /Users/jendawk/miniconda3/envs/my-rdkit-env

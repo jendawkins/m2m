@@ -11,6 +11,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
                             cluster_per_met_cluster = 0, repeat_clusters = 1,embedding_dim = 2,
                             deterministic = True, linear = False, nl_type = "linear",dist_var_frac = 0.9,
                             overlap_frac = 0.5, cluster_std = 1):
+
     # Choose metabolite indices for each cluster
     np.random.seed(state)
     choose_from = np.arange(N_met)
@@ -97,18 +98,11 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
 
     # Specify beta, alpha, and the range for each microbial cluster sum
     if not deterministic:
-        betas = np.random.normal(0, np.sqrt(beta_var), size = (N_bug_clusters+1, N_met_clusters))
         alphas = st.bernoulli(0.5).rvs((N_bug_clusters, N_met_clusters))
         cluster_starts = np.arange(1, np.int(N_bug_clusters * cluster_disparity) + 1, cluster_disparity)
         cluster_ends = cluster_starts[1:] - cluster_disparity/10
         cluster_ends = np.append(cluster_ends, cluster_starts[-1] + cluster_disparity - cluster_disparity/10)
     else:
-        # betas = np.zeros((11,10))
-        # betas[0,:] = [-.01,.1,0.03,0.13,-0.4,0.4,-0.07,0.017,-0.06,0.06]
-        # vals = [-5.4,4.1,-4.8,6.7,-4.5,3.9,-3.4,0.8,-5.9,4.9]
-        # betas[1:,:] = np.diag(vals)
-        # betas = betas[:N_bug_clusters+1, :N_met_clusters]
-        # alphas = np.ones((N_bug_clusters, N_met_clusters))
         alphas = st.bernoulli(0.5).rvs((N_bug_clusters, N_met_clusters))
         cluster_starts = [100,350,510,650,870,1000,1200,1400,1600,1800]
         cluster_ends = [250,410,550,770,900,1100,1300,1500,1700,1900]
@@ -122,7 +116,6 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     X = np.zeros((N_samples, N_bug))
     temp2 = w_gen
     g = np.zeros((N_samples, N_bug_clusters))
-    # g = st.dirichlet()
     for i in range(N_bug_clusters):
         g[:,i] = st.uniform(cluster_starts[i], cluster_ends[i]-cluster_starts[i]).rvs(size = N_samples)
         outer_ixs = np.where(temp2[:,i]==1)[0]
@@ -155,18 +148,6 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
         else:
             y[:, j] = np.random.normal(betas[0, k] + g @ (betas[1:, k] * alphas[:, k]), np.sqrt(meas_var))
 
-        # ixs = np.where((betas[1:, k] * alphas[:, k]) > 1e-3)[0]
-        # for ix in ixs:
-        #     plt.figure()
-        #     plt.scatter(y[:, j], g[:, ix]);
-        #     plt.ylim(g.min(), g.max());
-        #     plt.title('bug clust ' + str(ix) + ' vs met clust ' + str(j))
-        #     plt.show()
-
-    # y = (y - np.mean(y, 0)) / np.std((y - np.mean(y)), 0)
-    # y_per_clust = np.vstack([y[:,z_gen[:,i]==1].mean(1) for i in np.arange(N_met_clusters)]).T
-    # g_new = np.hstack((np.ones((g.shape[0], 1)), g))
-    # betas = np.linalg.inv(g_new.T@g_new)@(g_new.T@(y_per_clust))
     return X, y, g, betas, alphas, w_gen, z_gen, bug_locs, met_locs, mu_bug, mu_met, r_bug, r_met, temp
 
 

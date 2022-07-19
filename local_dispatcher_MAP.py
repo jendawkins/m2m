@@ -38,25 +38,25 @@ param_dict = {('L', 'K'): [(30,30), (20,20)], 'seed': [0,1,2],
               }
 
 
-param_dict = {('L', 'K'): [(3,3), (4,4)], 'seed': [0,1,2],
-              ('learn','priors'): [('all', 'all')],
-              #'fix': ['sigma',''],
-              'iter': 10000,
-              'w_tau': [(-0.01, -1)],
-              'a_tau': [(-0.3, -3)], 'gmm': [0],
-              'N_met': 20, 'N_bug': 15,
-              'N_samples': 1000,
-              'lr': [0.1,0.01, 0.001], 'meas_var': 0.10,
-              'syn': 1,
-              'load': 0, 'linear': 0,
-              'nltype': ['exp','sin','sigmoid', 'poly'],
-              'hard': [0],
-              'lm': [0], 'lb': [0], 'adjust_lr': [1],
-              'locs': ['true'],
-              # 'yfile': ['y_high_corr.csv'],
-              'case': 'non-linear-2', 'safari': 0,
-              # 'safari': 1, 'most_corr': [0,1], 'saf_type': ['polar', 'lipids-pos', 'lipids-neg']
-              }
+# param_dict = {('L', 'K'): [(3,3), (4,4)], 'seed': [0,1,2],
+#               ('learn','priors'): [('all', 'all')],
+#               #'fix': ['sigma',''],
+#               'iter': 10000,
+#               'w_tau': [(-0.01, -1)],
+#               'a_tau': [(-0.3, -3)], 'gmm': [0],
+#               'N_met': 20, 'N_bug': 15,
+#               'N_samples': 1000,
+#               'lr': [0.1,0.01, 0.001], 'meas_var': 0.10,
+#               'syn': 1,
+#               'load': 0, 'linear': 0,
+#               'nltype': ['exp','sin','sigmoid', 'poly'],
+#               'hard': [0],
+#               'lm': [0], 'lb': [0], 'adjust_lr': [1],
+#               'locs': ['true'],
+#               # 'yfile': ['y_high_corr.csv'],
+#               'case': 'non-linear-2', 'safari': 0,
+#               # 'safari': 1, 'most_corr': [0,1], 'saf_type': ['polar', 'lipids-pos', 'lipids-neg']
+#               }
 
 total_iters = np.prod([len(v) for v in param_dict.values() if hasattr(v, '__len__') and not isinstance(v, str)])
 print(total_iters)

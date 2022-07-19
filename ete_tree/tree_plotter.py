@@ -10,11 +10,20 @@ import subprocess
 import argparse
 base_path = '/Users/jendawk/Dropbox (MIT)/M2M'
 
+# This script plots phylogenetic trees for microbes and classy-fire classifcation trees for metabolites, saves
+# the newick trees, and calculates distance matrices from trees
+# NOTE: this script needs ete_env, not M2M_CodeBase env like the other scripts
+
 def get_dist(seqs, newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
-             out_path = base_path + '/inputs/classy-fire/', name = 'x_dist.csv'):
+             out_path = base_path + '/inputs/', name = 'x_dist.csv'):
+    # This function saves a distance matrix to out_path based on an input phylogenetic/classification tree file
+    # Inputs:
+    #  - seqs: the sequences or metabolites to get a distance matrix for
+    # - newick_path: the path of the newick tree (seqs needs to match the leaves on the newick tree)
+    # - out_path: the path to save the distance matrix to
+    out_path = out_path + '/classy-fire/'
     t = ete3.TreeNode(newick_path)
     nodes = [n.name for n in t.traverse() if n.is_leaf()]
-    # taxa_labels = pd.read_csv(data_path + '/taxa_labels.csv', index_col=[0])
     dist = {}
     for seq1 in seqs:
         if seq1.replace('(', '_').replace(')', '_').replace(':',
@@ -52,11 +61,16 @@ def get_dist(seqs, newick_path=base_path + '/ete_tree/phylo_placement/output/new
 def plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
                   out_path= base_path + '/outputs',
                   data_path = base_path + '/inputs', taxa_keep = None, name = None):
+    # Plots the asv tree with taxonomic information given an input newick tree
+    # inputs:
+    # - newick_path: path of the newick tree
+    # - out_path: path to save the tree plot
+    # - data_path: path of the taxonomic labels
+    # - taxa_keep: which taxa to plot labels of on the tree
+    # - name: name of the tree plot file
     t = ete3.TreeNode(newick_path)
-    # t.render('16s_tree.pdf')
     taxa_labels = pd.read_csv(data_path + '/taxa_labels.csv', index_col=[0])
-    # if taxa_keep is not None:
-    #     label_keep = taxa_labels['labels'].loc[taxa_keep].values
+
     for n in t.traverse():
         if taxa_keep is not None:
             if n.is_leaf():
@@ -82,47 +96,47 @@ def plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newi
 
 def plot_metab_tree(mets_keep, newick_path=base_path + '/ete_tree/w1_newick_tree.nhx',
                     out_path=base_path + '/outputs/', name='met_tree.pdf'):
+
+    # Plots the metabolomic tree given an input newick tree
+    # inputs:
+    # - newick_path: path of the newick tree
+    # - out_path: path to save the tree plot
+    # - data_path: path of the taxonomic labels
+    # - mets_keep: which metabolites to plot labels of on the tree
+    # - name: name of the tree plot file
+
     t = ete3.TreeNode(newick_path)
     if mets_keep is not None:
-        mets = [m.replace('(', '_').replace(')', '_').replace(':','_').replace(',','_').replace('[','_').replace(']','_').replace(';','_') for m in mets_keep]
-    # for n in t.traverse():
-    #     if mets_keep is not None:
-    #         if n.is_leaf():
-    #             if n.name not in mets:
-    #                 n.detach()
+        mets_keep = [m.replace('(', '_').replace(')', '_').replace(':','_').replace(',','_').replace('[','_').replace(']','_').replace(';','_') for m in mets_keep]
 
     for n in t.traverse():
         if n.is_leaf():
             if mets_keep is not None and n.name not in mets_keep:
                 n.name = ''
-                # n.add_face(ete3.TextFace(n.name, fgcolor = 'Red'), column = 0, position = 'branch-right')
-        # else:
-        #     n.add_face(ete3.TextFace(n.name, fgcolor='Black'), column=0, position='branch-top')
 
-            # n.face.fgcolor = 'Yellow'
     ts = ete3.TreeStyle()
     ts.show_leaf_name = True
     t.render(out_path + '/' + name, tree_style = ts)
     plt.close()
 
 def plot_orig_metab_tree(out_path=base_path + '/outputs', name='mets_in.pdf', in_mets = None,
-                         in_path = base_path + '/inputs/', classy_fire_path = base_path + '/ete_tree/',
+                         in_path = base_path + '/inputs/processed/',
                          newick_path = base_path + '/ete_tree/w1_newick_tree.nhx', dist_type = ''):
-    with open(in_path + '/classy-fire/met_to_inchikey.pkl', 'rb') as f:
-        met_to_inchikey = pkl.load(f)
 
-    inchikey_to_met = {met_to_inchikey[i]: i for i in met_to_inchikey.keys()}
-    met_classes = pd.read_csv(base_path + '/inputs/classy-fire/classy_fire_df.csv', index_col = 0, header = 0).T
-    # df_dict = {}
-    # for file in os.listdir(base_path + '/ete_tree/classy_fire_results/'):
-    #     classification = pd.read_csv(base_path + '/ete_tree/classy_fire_results/' + file, index_col=0)
-    #     met = inchikey_to_met[file.split('.csv')[0].split('=')[1]]
-    #     if met not in df_dict.keys():
-    #         df_dict[met] = {}
-    #     for cl in classification.index.values:
-    #         df_dict[met][cl] = classification['Classification'][cl]
-    # met_classes = pd.DataFrame(df_dict).T
-    # met_classes = pd.read_csv(in_path + 'metab_classes.csv')
+    # Constructs the metabolomic tree given the input metabolites and the classy-fire classifications
+    # inputs:
+    # - newick_path: path to save the newick tree to
+    # - out_path: path to save the tree plot
+    # - in_path: path for the input processed data
+    # - in_mets: which metabolites to use in making the tree
+    # - name: name of the tree plot file
+    # - dist_type: How to construct the distance between branches of the tree; options:
+    #           '' (empty string): set all branch distances = 1
+    #           'clumps': set branch distance = 1 if within the same level 5 classification, or distance = 100 if not
+    #           'stratified': increase branch distance exponentially with increasing classification levels
+
+    met_classes = pd.read_csv(in_path + '/classy-fire/classy_fire_df.csv', index_col = 0, header = 0).T
+
     if dist_type == 'stratified':
         vals = [i**2 for i in range(1, met_classes.shape[1])]
         col_dicts = list(zip(met_classes.index.values, [np.min(vals)]*met_classes.shape[0]))
@@ -169,7 +183,6 @@ def plot_orig_metab_tree(out_path=base_path + '/outputs', name='mets_in.pdf', in
             query_parent_dict[classification.iloc[-1].upper()] = [met]
         else:
             query_parent_dict[classification.iloc[-1].upper()].append(met)
-        # query_child_dict[met] = classification['Classification'].iloc[-1].upper()
 
     root = query_parent_dict[None][0]
     query_root = ete3.TreeNode(name=root)
@@ -192,9 +205,7 @@ def plot_orig_metab_tree(out_path=base_path + '/outputs', name='mets_in.pdf', in
             n.add_face(ete3.TextFace(n.name + '   '), column = 0, position = 'branch-top')
     if name is not None:
         query_root.render(out_path + '/' + name)
-    # for n in query_root.traverse():
-    #     if n.is_leaf():
-    #         n.name.replace('(', '<').replace(')','>').replace('/','_')
+
     query_root.write(features=['name'], outfile=newick_path, format=0)
     plt.close()
 
@@ -209,13 +220,6 @@ if __name__ == "__main__":
     parser.add_argument("-dtype", "--dtype", type = str)
     args = parser.parse_args()
 
-    # print('TREE PLOTTER')
-    # print(args.fun)
-    # print(args.name)
-    # print(args.out)
-    # if args.feat is not None:
-    #     print(len(args.feat))
-    # print('')
     if args.out is not None:
         if not os.path.isdir(args.out):
             os.mkdir(args.out)

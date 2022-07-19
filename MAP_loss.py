@@ -20,16 +20,23 @@ import numpy as np
 from concrete import *
 from helper import *
 
-# This class calculates the loss
+# This class calculates the loss and is called by the model from model.py
+# inputs:
+# - net: the model from model.py
+
 class MAPloss():
     def __init__(self,net):
         self.net = net
         self.loss_dict = {}
         self.compute_loss_for = net.compute_loss_for
 
-    # computes loss for each parameter specified in priors2set (default is all parameters, but if you want to fix a
-    # parameter value or see if the model learns without a certain prior, you can specify that
     def compute_loss(self, outputs, true):
+        # computes loss for each parameter specified in net.compute_loss_for
+        # (default is all parameters, but if you want to fix a
+        # parameter value or see if the model learns without a certain prior, you can specify that)
+        # inputs:
+        # - outputs: predicted metabolic cluster outputs
+        # - true: true metabolite values
         self.loss_dict['y'] = self.marginalized_loss(outputs, true)
         total_loss = 0
         for param in self.compute_loss_for:
@@ -43,6 +50,9 @@ class MAPloss():
         return total_loss
 
     def w_loss(self):
+        # w_loss is only computed if (1) no microbial input embedded locations are given, or (2) we decide to learn
+        # w instead of just calculate it from the microbial locations and learned cluster centers/radii
+        # (note: w is the same as omega in the overleaf, I use them interchangeably here)
         if self.net.microbe_locs is not None:
             eye = torch.eye(self.net.bug_embedding_dim).unsqueeze(0).expand(self.net.L, -1, -1)
             var = torch.exp(self.net.r_bug).unsqueeze(-1).unsqueeze(-1).expand(-1,self.net.bug_embedding_dim,
@@ -53,14 +63,15 @@ class MAPloss():
             mvn = torch.log((torch.exp(temp)*self.net.w_act).sum(1) + 1e-10).sum()
         else:
             mvn = 0
+
         if self.net.sample_w:
             loss =-(BinaryConcrete(self.net.w_loc, self.net.omega_temp).log_prob(self.net.w_soft).sum(1) + mvn).sum()
         else:
             loss = -(BinaryConcrete(self.net.w_loc, self.net.omega_temp).log_prob(self.net.w_act).sum(1) + mvn).sum()
         self.loss_dict['w'] = loss
 
-    # total loss for each value of z
     def marginalized_loss(self, outputs, true):
+        # Marginalized loss over z, the metabolic cluster indicator
         if self.net.met_locs is not None:
             eye = torch.eye(self.net.met_embedding_dim).unsqueeze(0).expand(self.net.K, -1, -1)
             var = torch.exp(self.net.r_met).unsqueeze(-1).unsqueeze(-1).expand(-1,self.net.met_embedding_dim,
@@ -81,6 +92,10 @@ class MAPloss():
         return loss
 
     def alpha_loss(self):
+        # Computes loss for alpha, modeled as binary concrete with location self.net.alpha_loc and temperature
+        # self.net.alpha_temp
+        # Note that we compute the loss of alpha_act, which is the transformed version of alpha to be within 0 and 1
+        # (rather than the unconstrained net.alpha, which is what the model learns through gradient descent)
         if self.net.sample_a:
             self.loss_dict['alpha'] = -BinaryConcrete(self.net.alpha_loc, self.net.alpha_temp).log_prob(self.net.alpha_soft).sum().sum()
         else:
@@ -92,43 +107,56 @@ class MAPloss():
             self.loss_dict['alpha'] += nb
 
     def beta_loss(self):
+        # Computes loss for beta, regression coefficients
+        # Modeled as normally distributed
         temp_dist = self.net.distributions['beta']
         self.loss_dict['beta'] = -temp_dist.log_prob(self.net.beta).sum()
 
     def mu_bug_loss(self):
+        # Mu_bug loss computed
+        # Mu_bug is multivariate normally distributed
         temp_dist = self.net.distributions['mu_bug']
         self.loss_dict['mu_bug'] = -temp_dist.log_prob(self.net.mu_bug).sum()
 
     def r_bug_loss(self):
+        # Computes loss for r_bug
+        # Note that we have to exponentiate net.r_bug to compute the loss of the constrained parameter (constrained to
+        # be greater than 0)
+        # We also have to take the inverse of the transformed net.r_bug since we paramterize net.r_bug as inverse gamma,
+        # but torch only has a gamma distribution
         gamma = self.net.distributions['r_bug']
         val = 1 / (torch.exp(self.net.r_bug))
         val = torch.clamp(val, min=1e-10)
         self.loss_dict['r_bug'] = -gamma.log_prob(val).sum()
 
     def mu_met_loss(self):
+        # Loss for mu_met, same as loss for mu_bug
         temp_dist = self.net.distributions['mu_met']
         self.loss_dict['mu_met'] = -temp_dist.log_prob(self.net.mu_met).sum()
 
     def r_met_loss(self):
+        # Computes loss for r_met, same as loss for r_bug
         val = 1 / (torch.exp(self.net.r_met))
         gamma = self.net.distributions['r_met']
         self.loss_dict['r_met'] = -gamma.log_prob(val).sum()
 
     def pi_met_loss(self):
+        # Computes loss for pi_met
+        # We have to transform pi_met using a softmax to it's constrained value
         epsilon = torch.exp(self.net.e_met)
         eps = 1e-10
         temp = (1-2*eps)*torch.softmax(self.net.pi_met,1) + eps
         self.loss_dict['pi_met'] = (torch.Tensor(1 - epsilon) * torch.log(temp)).sum()
 
     def e_met_loss(self):
+        # Loss for e_met
         val = torch.exp(self.net.e_met)
         gamma = self.net.distributions['e_met']
         self.loss_dict['e_met'] = -gamma.log_prob(val).sum()
 
     def sigma_loss(self):
-        # gamma_log_prob = Gamma(self.net.params['sigma']['scale'],
-        #                        self.net.params['sigma']['dof']).log_prob(1/(torch.exp(self.net.sigma)))
-
+        # Loss for sigma
+        # Note: this prior could be worked on some more
         halfnorm_log_prob = HalfNormal(self.net.params['sigma']['scale']).log_prob(torch.exp(self.net.sigma))
         self.loss_dict['sigma'] = -halfnorm_log_prob
 

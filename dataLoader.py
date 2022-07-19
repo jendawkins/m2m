@@ -3,7 +3,25 @@ from helper import *
 import pandas as pd
 import numpy as np
 
+# This script loads, filters, and transforms the CDI data, and contains:
+# - metabLoader(): basically the same as dataLoader() below, but loads, filters, and transforms only metabolite data
+#       (I only made this because I
+#       was trying out a lot of different filtering for the metabolites and it was quicker just to reload the metabolite
+#       data each time
+# - dataLoader(): loads, filters, and transforms the metabolite data and the microbial data and each week
+
+
 class metabLoader():
+    # Class loads, filters, and transforms the metabolite data from the CDI study
+    # TO DO: to use with pytorch 3.6 (i.e. the latest version that can be used with ete3), need to save and load .xlsx file as .csv
+    # Inputs:
+    # - path: path to cdi data
+    # - filename: filename of CDI data
+    # - non_zero_perc: For filtering, keep metabolites that are non-zero within <non_zero_perc> percentage of participants
+    #       (i.e. non_zero_perc = 95 means only metabolites not zero in 95 participants are kept, all others are filtered out)
+    # - meas_thresh: threshold below which to count as 'zero' (or the measurement threshold)
+    # - var_perc: For filtering, keep metabolites that have coefficients of variation in the top <var_perc> percentile
+    # - week: Week of data to use
     def __init__(self, path = "/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/cdi/",
                  filename = "CDiffMetabolomics.xlsx", non_zero_perc = 95, meas_thresh = 0,
                  var_perc = 5, week = 1):
@@ -104,7 +122,7 @@ class metabLoader():
 
     def filter_transform(self, data, targets_by_pt, filter = True, weeks = [0,1,2]):
         if filter:
-            filt1 = filter_by_pt(data, targets_by_pt, perc=self.non_zero_perc/100, pt_thresh=1,
+            filt1 = filter_by_pt(data, perc=self.non_zero_perc/100, pt_thresh=1,
                                  meas_thresh=self.meas_thresh, weeks = weeks)
             # print(key + ', 1st filter: ' + str(filt1.shape))
         else:
@@ -123,12 +141,24 @@ class metabLoader():
 
 
 class dataLoader():
+    # Class loads, filters, and transforms the metabolite & 16s data from the CDI study
+    # TO DO: to use with pytorch 3.6 (i.e. the latest version that can be used with ete3), need to save and load .xlsx file as .csv
+    # Inputs:
+    # - path: path to cdi data
+    # - filename_cdiff: filename of CDI metabolomic data
+    # - filename_16s: filename of CDI 16s data
+    # - pt_perc: For filtering, keep metabolites that are non-zero within <non_zero_perc> percentage of participants
+    #           (i.e. non_zero_perc = 95 means only metabolites not zero in 95 participants are kept, all others are filtered out)
+    #           dictionary with parameters for metabolites and 16s respectively
+    # - meas_thresh: threshold below which to count as 'zero' (or the measurement threshold)
+    # - var_perc: For filtering, keep metabolites that have coefficients of variation in the top <var_perc> percentile
+    # - pt_tmpts: Whether to filter using just one timepoint or multiple
     def __init__(self, path = "/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/cdi/",
                  filename_cdiff = "CDiffMetabolomics.xlsx",
         filename_16s = 'seqtab-nochim-total.xlsx',
-                 pt_perc = {'metabs': .25, '16s': .1, 'scfa': 0, 'toxin':0},
-                 meas_thresh = {'metabs': 0, '16s': 10, 'scfa': 0, 'toxin':0},
-                 var_perc={'metabs': 50, '16s': 5, 'scfa': 0, 'toxin':0}, pt_tmpts = 1):
+                 pt_perc = {'metabs': .25, '16s': .1},
+                 meas_thresh = {'metabs': 0, '16s': 10},
+                 var_perc={'metabs': 50, '16s': 5}, pt_tmpts = 1):
         
         self.path = path
         self.filename_cdiff = filename_cdiff
@@ -141,16 +171,10 @@ class dataLoader():
         self.pt_tmpts = pt_tmpts
 
         self.load_cdiff_data()
-        # self.load_ba_data()
         self.load_16s_data()
         self.keys = {'metabs':self.cdiff_data_dict,'16s':self.data16s_dict}
 
         self.combos = ['metabs_16s']
-        # self.week_one = {}
-        # for key, value in keys.items():
-        #     temp = self.get_week_x(value['data'],value['targets_by_pt'], week = 1)
-        #     self.week_one[key] = self.filter_transform(temp['x'], value['targets_by_pt'], key), temp['y']
-
         self.week = {}
         self.week_one = {}
         self.week_raw = {}
@@ -184,16 +208,9 @@ class dataLoader():
             value['data'] = value['data'].fillna(0)
             value['targets'] = value['targets'].replace('Recur', 'Recurrer').replace('Cleared','Non-recurrer')
             value['targets_by_pt'] = value['targets_by_pt'].replace('Recur', 'Recurrer').replace('Cleared', 'Non-recurrer')
-            # if key == 'scfa':
-            #     filter = False
-            #     value['data'] = value['data'].drop('Heptanoate', axis = 1)
-            # else:
             filter = True
             f1, tr0, fl2, value['filtered_data'] = self.filter_transform(value['data'], targets_by_pt = None, key = key, filter = filter)
-            # temp = self.get_week_x(value['filtered_data'], value['targets_by_pt'], week=1)
-            #
-            # self.week_one[key] = temp['x'], temp['y']
-            temp_filt = filter_by_pt(value['data'], targets=None, perc=self.pt_perc, pt_thresh=self.pt_tmpts,
+            temp_filt = filter_by_pt(value['data'], perc=self.pt_perc, pt_thresh=self.pt_tmpts,
                                      meas_thresh=self.meas_thresh)
 
             for week in [0,1,2,3]:
@@ -211,10 +228,6 @@ class dataLoader():
                     self.filt2 = filt2
                     self.week1_data = x
                 self.week_sm[key][week] = {'x': x, 'y': temp['y']}
-
-                # x = filter_by_pt(temp['x'], perc=self.pt_perc, targets = None,
-                #                                              pt_thresh = self.pt_tmpts, meas_thresh=self.meas_thresh,
-                #                                                   weeks = [week])
                 x = temp['x'][self.week_sm[key][week]['x'].columns.values]
                 self.week_sm_filt[key][week] = {'x': x,'y': temp['y']}
 
@@ -288,9 +301,8 @@ class dataLoader():
 
     def filter_transform(self, data, targets_by_pt, key = 'metabs', filter = True, weeks = [0,1,2]):
         if filter:
-            filt1 = filter_by_pt(data, targets_by_pt, perc=self.pt_perc, pt_thresh=self.pt_tmpts,
+            filt1 = filter_by_pt(data, perc=self.pt_perc, pt_thresh=self.pt_tmpts,
                                  meas_thresh=self.meas_thresh, weeks = weeks)
-            # print(key + ', 1st filter: ' + str(filt1.shape))
         else:
             filt1 = data
 
@@ -312,10 +324,6 @@ class dataLoader():
             filt2 = transformed
 
         stand, mean, dem = standardize(filt2, override=True)
-        # print(key + ', 2nd filter: ' + str(filt2.shape))
-        # print(key)
-        # print(filt1.shape)
-        # print(filt2.shape)
         return filt1, transformed, filt2, stand
 
 

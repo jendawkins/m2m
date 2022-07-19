@@ -3,16 +3,34 @@ import numpy as np
 import os
 from helper import *
 
+# TO DO:
+# - calculate measurement variance for safari data and save to pkl file
+# - add 4th type of metabolomic data (GC-MS) to loading and run
+# - figure out if/how to combine metabolomic data?
 data_path = '/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/Safari_data/'
-out_path = '/Users/jendawk/Dropbox (MIT)/M2M/inputs/'
+out_path = '/Users/jendawk/Dropbox (MIT)/M2M/inputs/processed/'
 
 def load_safari_data(data_path='/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/Safari_data/',
                      met_frac=0.9, bug_frac = 0.15):
+    # This function:
+    #   - Loads the safari data given the input data path
+    #   - Filters out metabolites and microbes present (i.e. nonzero) in fewer than 'met_frac' and 'bug_frac' fractions of
+    #           participants, respectively
+    #   - Calculates the correlation between microbes and metabolites, and saves a dataframe of correlation coefficients
+    #           - for if you want to run the model with a dataset of only microbes and metabolites that are more highly
+    #               correlated to eachother
 
+    # Loads meta data
     metadata = pd.read_csv(data_path + 'metadata.txt', sep = "\t", header = 0, index_col = 0)
     samples_keep = metadata.index.values[:101]
     print(samples_keep[-1])
     dat_dict = {}
+
+    # For the three LC-MS data files:
+    #   loads data
+    #   filters data by met_frac
+    #   log transforms data
+    #   standardizes data
     for file in os.listdir(data_path):
         if 'quant' not in file:
             continue
@@ -52,6 +70,7 @@ def load_safari_data(data_path='/Users/jendawk/Dropbox (MIT)/Microbes to Metabol
         dat_dict[fname]['log_std_filt'] = pd.DataFrame(dat_fin, index = transformed.index.values,
                                                        columns=transformed.columns.values[ixs])
 
+    # Loads ASV data, filters according to bug_frac, and transforms counts to relative abundances
     asv_dat = data_path + '16S-ASV-table.csv'
     asvs = pd.read_csv(asv_dat, index_col=0, header=0)
     ra = (asvs.values.T / np.sum(asvs.values, 1)).T
@@ -65,6 +84,7 @@ def load_safari_data(data_path='/Users/jendawk/Dropbox (MIT)/Microbes to Metabol
     asv_dat_dict = {'raw': asvs, 'ra': pd.DataFrame(ra, index = asvs.index.values, columns = asvs.columns.values),
                     'ra_filt': dat_fin_asvs}
 
+    # If correlation file not present, calculate spearman correlation coefficient between all microbes and all metabolites
     if 'safari_corr_filt.pkl' not in os.listdir(out_path):
         res_dict = {}
         for fname in dat_dict.keys():

@@ -19,18 +19,34 @@ from collections import Counter
 
 def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
                   mu_bug, r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta):
+    """
+    Given outputs of data_gen.py,
+    plot:
+        - distribution of microbial relative abundances
+        - distribution of microbial relative abundances summed into generated clusters
+        - distribution of metabolite levels
+        - 2D microbe locations and clusters (if embedding dim = 2)
+        - 2D metabolite locations and clusters (if embedding dim = 2)
+        - Microbe clusters vs metabolite cluster
+    write:
+        - file with list of lists where each list is a cluster of microbes
+        - file with list of lists where each list is a cluster of metabolites
+    """
+    # distribution of microbial relative abundances
     plt.figure();
     plt.hist(x.flatten(), bins=20);
     plt.title('Microbe data distribution')
     plt.savefig(path + 'bug_hist.png')
     plt.close()
 
+    # distribution of microbial relative abundances summed into generated clusters
     plt.figure();
     plt.hist(g.flatten(), bins=20);
     plt.title('Microbe cluster data distribution')
     plt.savefig(path + 'bug_hist.png')
     plt.close()
 
+    # distribution of metabolite levels
     plt.figure();
     plt.hist(y.flatten(), bins=20);
     plt.title('Metabolite data distribution')
@@ -38,6 +54,8 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
     plt.close()
 
     bug_clusters = [np.where(gen_u[:,i])[0] for i in np.arange(gen_u.shape[1])]
+
+    # file with list of lists where each list is a cluster of microbes
     for ii,clust in enumerate(bug_clusters):
         if not os.path.isfile(path + 'microbe_clusters.txt'):
             with open(path + 'microbe_clusters.txt', 'w') as f:
@@ -46,6 +64,8 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
             with open(path + 'microbe_clusters.txt', 'a') as f:
                 f.writelines('Cluster ' + str(ii) + ': ' + str(clust) + '\n')
 
+
+    # 2D microbe locations and clusters (if embedding dim = 2)
     fig2, ax2 = plt.subplots(3, 1, figsize = (8, 6*3))
     if mu_bug.shape[1]==2:
         fig, ax = plt.subplots(1, 2, figsize=(10, 5))
@@ -67,12 +87,9 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         bins = int((x.max() - x.min()) / 5)
         if bins<=10:
             bins = 10
-        # dixs = np.where(gen_w[i, :] == 1)[0]
-        # for dix in dixs:
         ix = np.where(gen_u[:, i]==1)[0]
         ax2[0].hist(x[:, ix].flatten(), range=(x.min(), x.max()), label='Cluster ' + str(i), alpha=0.5, bins = bins)
     ax2[0].set_xlabel('Microbial relative abundances')
-    # ax2[0].set_ylabel('# Microbes in Cluster x\n# Samples Per Microbe', fontsize = 10)
     ax2[0].set_title('Microbes')
     if mu_bug.shape[1] == 2:
         ax[0].set_aspect('equal')
@@ -85,8 +102,8 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         ax2[1].hist(b[:,k].flatten(), range = (b.min(), b.max()), label = 'Cluster ' + str(k), alpha = 0.5, bins = bins)
     ax2[1].set_title('Histogram of microbe cluster sums')
     ax2[1].legend(loc = 'upper right')
-    # ax3[0].set_aspect('equal')
 
+    # 2D metabolite locations and clusters (if embedding dim = 2)
     ax2[0].legend(loc = 'upper right')
     ax2[1].legend(loc = 'upper right')
     for i in range(gen_z.shape[1]):
@@ -96,10 +113,6 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
             ax[1].scatter(mu_met[i, 0], mu_met[i, 1], marker='*', color=p2.get_facecolor().squeeze())
             ax[1].set_title('Metabolites')
             ax[1].text(mu_met[i, 0], mu_met[i, 1], 'Cluster ' + str(i))
-            # p2 = None
-            # for ii in ix:
-                # p2 = ax[1].scatter(gen_met_locs[ii, 0], gen_met_locs[ii, 1], alpha = )
-                # ax[1].text(gen_met_locs[ii,0], gen_met_locs[ii,1], 'Metabolite ' + str(ii))
             circle2 = plt.Circle((mu_met[i,0], mu_met[i,1]), r_met[i],
                                  alpha=0.2, color=p2.get_facecolor().squeeze(), label = 'Cluster ' + str(i))
             ax[1].add_patch(circle2)
@@ -109,7 +122,6 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         ax2[2].hist(y[:, ix].flatten(), range=(y.min(), y.max()),
                     label='Cluster ' + str(i), alpha=0.5, bins = bins)
     ax2[2].set_xlabel('Standardized metabolite levels')
-    # ax2[2].set_ylabel('# Metabolites in Cluster x\n# Samples Per Metabolite', fontsize = 10)
     ax2[2].set_title('Metabolites')
 
     if mu_bug.shape[1] == 2:
@@ -117,7 +129,6 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         fig.tight_layout()
         fig.savefig(path + 'embedded_locations.png')
         plt.close(fig)
-    # fig2.tight_layout()
     fig2.savefig(path + 'cluster_histogram.png')
     plt.close(fig2)
 
@@ -130,9 +141,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
     L = gen_u.shape[1]
     fig, ax = plt.subplots(len(bug_active), 1, figsize=(8, 8 * len(bug_active)))
     ii = 0
-    # g = x @ gen_u
-    # ax_ylim = (np.min(y.flatten()) - 0.01 * np.max(y.flatten()), np.max(y.flatten()) + 0.01 * np.max(y.flatten()))
-    # ax_xlim = (np.min(g.flatten()) - 0.01 * np.max(g.flatten()), np.max(g.flatten()) + 0.01 * np.max(g.flatten()))
+    # Microbe clusters vs metabolite cluster
     for bug_clust, met_clust in zip(bug_active, met_active):
         ixs = np.where(gen_z[:, met_clust] == 1)[0]
         for ix in ixs:
@@ -143,7 +152,6 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         slope = np.round((np.max(y[:, ixs[0]]) - np.min(y[:, ixs[0]])) / ((np.max(g[:, bug_clust]) - np.min(g[:, bug_clust]))), 3)
         ax[ii].text(0.6, 0.8, 'slope = ' + str(slope), horizontalalignment='center',
                       verticalalignment='center', transform=ax[ii].transAxes)
-        # ax[ii].set_xlim(ax_xlim)
         ii += 1
         try:
             ax[ii].text(0.6, 0.6, 'beta = ' + str(gen_beta[bug_clust + 1, met_clust]), horizontalalignment='center',
@@ -154,6 +162,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
     fig.savefig(path + '-sum_x_v_y.png')
     plt.close(fig)
 
+    # Metabolite levels for first 8 subjects
     fig, ax = plt.subplots(8,1, figsize = (8,4*8))
     for i in range(gen_z.shape[1]):
         ixs = np.where(gen_z[:, i] == 1)[0]
@@ -166,12 +175,21 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
 
 
 def plot_distribution(dist, param, true_val = None, ptype = 'init', path = '', **kwargs):
+    """
+    Plot initial distributions
+    Input:
+        - dist: pytorch distribution
+        - param: string name of parameter
+        - true_val: whether the parameter has a true value or not (i.e. if data is generated, can set true_val =True)
+        - ptype: options 'init' and 'priors' - whether we are plotting the distribution of the priors or initialized values
+        - path: path to save files
+    Output:
+        - plot of distribution in path + '/' + ptype + '/' param.pdf
+    """
     if true_val is not None:
         true_val = true_val[param]
     if ptype == 'init':
         label = 'Initialized values'
-    elif ptype == 'prior':
-        label = 'True values'
     vals = dist.sample([500])
     if 'r' in param:
         vals = 1/vals
@@ -214,6 +232,11 @@ def plot_distribution(dist, param, true_val = None, ptype = 'init', path = '', *
     plt.close(fig)
 
 def plot_posterior(param_dict, seed, out_path):
+    """
+    Plot posterior distributions of each parameter saved in param_dict; plot histogram of the last fourth of iterations
+    (i.e. if iterations = 12,000, plot histogram of parameter values from epoch = 9,000 to epoch = 12,000)
+    Plots saved in out_path + '/posteriors/'
+    """
     for key in param_dict[seed].keys():
         print(key)
         start = len(param_dict[seed][key])
@@ -245,6 +268,13 @@ def plot_posterior(param_dict, seed, out_path):
         fig.savefig(out_path + '/posteriors/' + str(seed) + '-' + key + '-posterior_dist.pdf')
 
 def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
+    """
+    Plot parameter traces over the course of learning
+    Inputs: path = path to save; param_dict = parameter dictionary; params2learn = whichever parameters the model is learning;
+        true_vals = true val dictionary if data is synthetic, otherwise set to None
+        net = model
+        fold = seed
+    """
     fig_dict, ax_dict = {},{}
     for name, plist in param_dict.items():
         if name in params2learn or 'all' in params2learn or name == 'z' or 'w_' in name:
@@ -327,6 +357,9 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
             plt.close(fig_dict[name])
 
 def plot_locations(path, radii, means, locs, gps, name = 'bug'):
+    """
+    Plot 2D embedded locations and circles indicating cluster, only plot if embedded dimension = 2
+    """
     colors = cm.rainbow(np.linspace(0, 1, len(gps)))
     fig, ax = plt.subplots(figsize = (10,10))
     # handles = []
@@ -349,6 +382,9 @@ def plot_locations(path, radii, means, locs, gps, name = 'bug'):
 
 
 def plot_output_locations(path, net, best_mod, param_dict, fold, type = 'best', plot_zeros = False):
+    """
+    Plot 2D embedded locations and circles indicating cluster, only plot if embedded dimension = 2
+    """
     best_w = param_dict['w'][best_mod]
     # best_w = best_w[:, mapping['bug']]
     best_mu = param_dict['mu_bug'][best_mod]
@@ -402,6 +438,9 @@ def plot_output_locations(path, net, best_mod, param_dict, fold, type = 'best', 
     plt.close(fig)
 
 def get_interactions_csv(path, best_mod, param_dict, seed):
+    """
+    Save csv of iteractions between each active cluster
+    """
     best_w = param_dict[seed]['w'][best_mod]
     best_z = param_dict[seed]['z'][best_mod]
     best_alpha = param_dict[seed]['alpha'][best_mod]
@@ -417,6 +456,9 @@ def get_interactions_csv(path, best_mod, param_dict, seed):
 
 
 def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
+    """
+    Plot interactions between each active cluster
+    """
     out = out_vec[best_mod].detach().numpy()
     best_w = param_dict[seed]['w'][best_mod]
     best_z = param_dict[seed]['z'][best_mod]
@@ -434,28 +476,6 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
         num_active_met = 1
     if num_active_microbe==0:
         num_active_microbe = 1
-    # fig, ax = plt.subplots(num_active_microbe, num_active_met, figsize = (8*num_active_met,8*num_active_microbe))
-    # if num_active_microbe==1:
-    #     ax = np.expand_dims(ax,0)
-    # if num_active_met==1:
-    #     ax = np.expand_dims(ax,1)
-    # ax_xlim = (np.min(true_sum.flatten())-10, np.max(true_sum.flatten())+10)
-    # ax_ylim = (np.min(targets.flatten()), np.max(targets.flatten()))
-
-    # if np.min(microbe_sum.flatten())>ax_xlim[1] or np.max(microbe_sum.flatten()) < ax_xlim[0]:
-    #     ax_xlim = (np.min(microbe_sum.flatten()), np.max(microbe_sum.flatten()))
-    # if np.min(out.flatten())>ax_ylim[1] or np.max(out.flatten())<ax_ylim[0]:
-    #     ax_ylim = (np.min(out.flatten()), np.max(out.flatten()))
-    # if np.max(out.flatten())>ax_ylim[1]:
-    #     ax_ylim = (ax_ylim[0], np.max(out.flatten()))
-    # if np.min(out.flatten())< ax_ylim[0]:
-    #     ax_ylim = (np.min(out.flatten()), ax_ylim[1])
-    # if np.max(microbe_sum.flatten())>ax_xlim[1]:
-    #     ax_xlim = (ax_xlim[0], np.max(microbe_sum.flatten()))
-    # if np.min(microbe_sum.flatten())< ax_xlim[0]:
-    #     ax_xlim = (np.min(microbe_sum.flatten()), ax_xlim[1])
-    # ranges = [[np.max(microbe_sum[:,i]/out[:,j]) - np.min(microbe_sum[:,i]/out[:,j]) for i in range(out.shape[1])] for j in range(out.shape[1])]
-    # ixs = [np.argmin(r) for r in ranges]
     fit_df = {}
     active_microbes = np.where(np.sum(best_w,0)>1)[0]
     active_mets = np.where(np.sum(best_z, 0) > 1)[0]
@@ -487,7 +507,7 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             lreg = st.linregress(microbe_sum[:, j], out[:, i])
             ax.set_title('Met Clust ' + str(i) + ' vs Microbe Clust ' + str(j) +
                          '\n r2= ' + str(np.round(lreg.rvalue**2,3)))
-            fit_df[(j,i)]['rvalue'] = lreg.rvalue
+            fit_df[(j,i)]['r-squared value'] = lreg.rvalue**2
             fit_df[(j,i)]['pvalue'] = lreg.pvalue
             fit_df[(j,i)]['slope'] = lreg.slope
             fit_df[(j,i)]['intercept'] = lreg.intercept
@@ -505,14 +525,6 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
                 fit_df[(j,i)]['alpha*beta'] = np.round(best_beta[j + 1, i] * best_alpha[j, i], 3)
             except:
                 continue
-            # slope = np.round((np.max(out[:,i]) - np.min(out[:, i]))/((np.max(microbe_sum[:,j]) - np.min(microbe_sum[:,j]))),3)
-            # try:
-            #     ax[jj,ii].text(0.6, 0.8,'slope = ' + str(slope), horizontalalignment='center',
-            #          verticalalignment='center', transform=ax[ii,jj].transAxes)
-            # except:
-            #     return
-            # ax[jj,ii].set_xlim(ax_xlim[0], ax_xlim[1])
-            # ax[jj,ii].set_ylim(ax_ylim[0], ax_ylim[1])
             jj+=1
         ii+=1
 
@@ -521,16 +533,26 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
     if not os.path.isfile(path + 'rfit.txt'):
         with open(path + '-avg-rho.txt', 'w') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
-                    str(np.round(np.std(df['rvalue']), 3)) + '\n')
+                    str(np.round(np.std(df['r-squared value']), 3)) + '\n')
     else:
         with open(path + '-avg-rho.txt', 'a') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
-                    str(np.round(np.std(df['rvalue']), 3)) + '\n')
+                    str(np.round(np.std(df['r-squared value']), 3)) + '\n')
 
     return x_dict, y_dict
 
 def plot_output(path, best_mod, out_vec, targets, true_vals,
                 param_dict, fold, type = 'unknown', meas_var = 0.1, metabs = None):
+    """
+    Function:
+        Plots output metabolic predictions of first 10 subjects
+        Saves dataframe of pairwise confusion matrices for metabolite cluster identities and microbe cluster identities
+        Writes files with RI of metabolites and microbes
+        Writes files with # of active metabolite and microbial clusters
+        Plots error per metabolite
+        Writes file with normalized root-mean squared error for metabolite predictions
+
+    """
     if true_vals is not None:
         gen_z = true_vals['z']
         gen_w = true_vals['w']
@@ -637,13 +659,13 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
 
     abs_err = np.abs(preds.detach().numpy() - targets)
     datstd = np.std(np.array(targets).flatten())
-    perc_corr = len(np.where(abs_err.flatten() < (0.25*datstd))[0])/len(abs_err.flatten())
-    if not os.path.isfile(path + 'perc-corr.txt'):
-        with open(path + 'perc-corr.txt', 'w') as f:
-            f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
-    else:
-        with open(path + 'perc-corr.txt', 'a') as f:
-            f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
+    # perc_corr = len(np.where(abs_err.flatten() < (0.25*datstd))[0])/len(abs_err.flatten())
+    # if not os.path.isfile(path + 'perc-corr.txt'):
+    #     with open(path + 'perc-corr.txt', 'w') as f:
+    #         f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
+    # else:
+    #     with open(path + 'perc-corr.txt', 'a') as f:
+    #         f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
 
     num_mets = preds.shape[1]
     if np.int(num_mets/37) < 1:
@@ -682,8 +704,8 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
         axx.scatter(preds_t[:, met_ids], residuals[:, met_ids], c=[color[cluster]],
                     label='Cluster ' + str(cluster))
 
-    RMSE_avg = np.round(np.mean(RMSE),4)
-    RMSE_std = np.round(np.std(RMSE),4)
+    # RMSE_avg = np.round(np.mean(RMSE),4)
+    # RMSE_std = np.round(np.std(RMSE),4)
     if not os.path.isfile(path + 'NRMSE.txt'):
         with open(path + 'NRMSE.txt', 'w') as f:
             f.write('SEED ' + str(fold) + ' NRMSE: ' + str(N_RMSE_est) + '\n')
@@ -691,8 +713,8 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
         with open(path + 'NRMSE.txt', 'a') as f:
             f.write('SEED ' + str(fold) + ' NRMSE: ' + str(N_RMSE_est) + '\n')
 
-    RMSE_df = pd.Series(RMSE, index = ['Metabolite ' + str(i) for i in range(len(RMSE))])
-    RMSE_df.to_csv(path + 'seed' + str(fold) + 'RMSE.csv')
+    # RMSE_df = pd.Series(RMSE, index = ['Metabolite ' + str(i) for i in range(len(RMSE))])
+    # RMSE_df.to_csv(path + 'seed' + str(fold) + 'RMSE.csv')
 
     axx.set_title('Residuals plot for metabolite level predictions')
     axx.set_xlabel('Predicted Levels')
@@ -703,6 +725,7 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
 
 
 def plot_loss(fig3, ax3, fold, iterations, loss_vec, test_loss=None, lowest_loss = None):
+    # Plot loss given loss vector
     ax3.set_title('Seed ' + str(fold))
     ax3.plot(iterations, loss_vec, label='training loss')
     if test_loss is not None:
@@ -715,6 +738,7 @@ def plot_loss(fig3, ax3, fold, iterations, loss_vec, test_loss=None, lowest_loss
     return fig3, ax3
 
 def plot_loss_dict(path, fold, loss_dict):
+    # Plot loss per each learned parameter
     params = loss_dict.keys()
     fig, ax = plt.subplots(len(params),1, figsize = (8, 5*len(params)))
     for i,param in enumerate(params):
@@ -728,39 +752,40 @@ def plot_loss_dict(path, fold, loss_dict):
     fig.savefig(path + 'seed' + str(fold) + '_loss_dict.png')
 
 
-def plot_cluster_outputs_vs_met_value(best_z, y, cluster_outputs, path, seed = 0):
-    cats = np.argmax(best_z, 1)
-    # ixs = [np.where(np.argmax(best_z, 1) == c)[0] for c in np.unique(cats)]
-    ixs = [np.where(np.argmax(best_z, 1) == c)[0][0] for c in np.unique(cats)]
-    unique_cats = np.unique(cats)
-    if best_z.shape[1] > 20:
-        n_clust = 20
-    else:
-        n_clust = best_z.shape[1]
-    clusters = np.append(unique_cats, np.arange(n_clust - len(unique_cats)))
-    for met_clust, jj in enumerate(ixs):
-        fig, ax = plt.subplots(1, n_clust, figsize=(8 * n_clust, 8))
-        dat = np.array(y)[:, jj]
-        for ct, ii in enumerate(clusters):
-            ax[ct].hist(dat, bins=20, label='True Met ' + str(jj));
-            if cats[ii] == ii:
-                ax[ct].set_title('ACTIVE CLUSTER')
-            try:
-                # ax[ct].hist(np.repeat(cluster_outputs.detach().numpy()[:, ii], len(ixs)), alpha=0.5,
-                #             label='Cluster ' + str(ii));
-                ax[ct].hist(cluster_outputs.detach().numpy()[:, ii], alpha=0.5,
-                             label='Cluster ' + str(ii));
-            except:
-                ax[ct].hist(cluster_outputs[:, ii], alpha=0.5,
-                            label='Cluster ' + str(ii));
-            ax[ct].legend();
-        fig.tight_layout()
-        # fig.savefig(path + 'seed-' + str(seed) + '-met' + str(unique_cats[met_clust]) + '-vs-clusters.pdf')
-        fig.savefig(path + 'seed-' + str(seed) + '-met' + str(jj) + '-vs-clusters.pdf')
-        plt.close(fig)
+# def plot_cluster_outputs_vs_met_value(best_z, y, cluster_outputs, path, seed = 0):
+#     cats = np.argmax(best_z, 1)
+#     # ixs = [np.where(np.argmax(best_z, 1) == c)[0] for c in np.unique(cats)]
+#     ixs = [np.where(np.argmax(best_z, 1) == c)[0][0] for c in np.unique(cats)]
+#     unique_cats = np.unique(cats)
+#     if best_z.shape[1] > 20:
+#         n_clust = 20
+#     else:
+#         n_clust = best_z.shape[1]
+#     clusters = np.append(unique_cats, np.arange(n_clust - len(unique_cats)))
+#     for met_clust, jj in enumerate(ixs):
+#         fig, ax = plt.subplots(1, n_clust, figsize=(8 * n_clust, 8))
+#         dat = np.array(y)[:, jj]
+#         for ct, ii in enumerate(clusters):
+#             ax[ct].hist(dat, bins=20, label='True Met ' + str(jj));
+#             if cats[ii] == ii:
+#                 ax[ct].set_title('ACTIVE CLUSTER')
+#             try:
+#                 # ax[ct].hist(np.repeat(cluster_outputs.detach().numpy()[:, ii], len(ixs)), alpha=0.5,
+#                 #             label='Cluster ' + str(ii));
+#                 ax[ct].hist(cluster_outputs.detach().numpy()[:, ii], alpha=0.5,
+#                              label='Cluster ' + str(ii));
+#             except:
+#                 ax[ct].hist(cluster_outputs[:, ii], alpha=0.5,
+#                             label='Cluster ' + str(ii));
+#             ax[ct].legend();
+#         fig.tight_layout()
+#         # fig.savefig(path + 'seed-' + str(seed) + '-met' + str(unique_cats[met_clust]) + '-vs-clusters.pdf')
+#         fig.savefig(path + 'seed-' + str(seed) + '-met' + str(jj) + '-vs-clusters.pdf')
+#         plt.close(fig)
 
 
 def plot_classes(y_class, ylocs, path):
+    # Plot 2D locations and class identity given classes (i.e. families) and embedded locations
     radii = []
     means = []
     locss = []
@@ -825,69 +850,30 @@ def plot_dist(dist, path = '/Users/jendawk/Dropbox (MIT)/M2M/figures/'):
     plt.close()
 
 
-# def skbio_mds(dat, dmax=30, path='/Users/jendawk/Dropbox (MIT)/M2M/figures/'):
-#     distmat = DistanceMatrix(dat)
-#     true_dist = squareform(dat)
-#     pvals = []
-#     locs_ls = []
-#     embeds = []
-#     for d in np.arange(2, dmax):
-#         embedding = pcoa(distmat, number_of_dimensions=d)
-#         locs = embedding.samples
-#         est_dist = pdist(locs)
-#         # est_dist = est_dist / np.max(est_dist)
-#         # true_dist = true_dist / np.max(true_dist)
-#         stat, pval = st.ks_2samp(est_dist, true_dist)
-#         pvals.append(pval)
-#         locs_ls.append(locs)
-#         embeds.append(embedding)
-#     best = np.argmax(pvals)
-#     plt.figure()
-#     plt.plot(np.arange(2, dmax), pvals)
-#     plt.yscale('log')
-#     plt.xlabel('dimensions')
-#     plt.ylabel('p-vals')
-#     plt.savefig(path + 'skbio-pcoa.pdf')
-#     plt.close()
+
+# if __name__ == "__main__":
+#     dtype = 'clumps'
+#     # args.case = args.case + '_100Bvar'
+#     xfile = 'x.csv'
+#     yfile = 'y.csv'
+#     xdist_file = 'x_dist.csv'
+#     ydist_file = 'y' + dtype + '_dist.csv'
+#     met_newick_name = 'w1_newick_tree.nhx'
 #
-#     fig, ax = plt.subplots(1, 2, figsize=(8, 5))
-#     ax[1].hist(pdist(locs_ls[best]), bins = 20)
-#     ax[1].set_xlabel('Embedded distances')
-#     ax[1].set_title('Distribution of Embedded Distances, d = ' + str(best))
-#     ax[0].hist(true_dist, bins = 20)
-#     ax[0].set_xlabel('True distances')
-#     ax[0].set_title('Distribution of Taxonomic Distances')
-#     fig.savefig(path + 'hist-skbio.pdf')
+#     # set data_path to point to directory with data
+#     base_path = '/Users/jendawk/Dropbox (MIT)/M2M'
+#     data_path = base_path + "/inputs"
+#     # Option to change filtering criteria
+#     x = pd.read_csv(data_path + '/' + xfile, index_col = [0])
+#     y = pd.read_csv(data_path + '/' + yfile, index_col = [0])
 #
-#     # plot_classes(classes, np.array(locs_ls[best]), path + '-skbio-')
+#     xdist = pd.read_csv(base_path + '/inputs/' + xdist_file, header=0, index_col=0)
+#     y = y.loc[x.index.values]
+#     if ydist_file not in os.listdir(base_path + '/inputs/'):
+#         make_dist_mat(y, ydist_file, base_path, newick_path = '/ete_tree/' + met_newick_name)
+#     ydist = pd.read_csv(base_path + '/inputs/' + ydist_file, header = 0, index_col = 0)
 #
-#     embeds[best].proportion_explained.to_csv(path + 'prop-exp.csv')
-#     return locs_ls[best]
-
-
-if __name__ == "__main__":
-    dtype = 'clumps'
-    # args.case = args.case + '_100Bvar'
-    xfile = 'x.csv'
-    yfile = 'y.csv'
-    xdist_file = 'x_dist.csv'
-    ydist_file = 'y' + dtype + '_dist.csv'
-    met_newick_name = 'w1_newick_tree.nhx'
-
-    # set data_path to point to directory with data
-    base_path = '/Users/jendawk/Dropbox (MIT)/M2M'
-    data_path = base_path + "/inputs"
-    # Option to change filtering criteria
-    x = pd.read_csv(data_path + '/' + xfile, index_col = [0])
-    y = pd.read_csv(data_path + '/' + yfile, index_col = [0])
-
-    xdist = pd.read_csv(base_path + '/inputs/' + xdist_file, header=0, index_col=0)
-    y = y.loc[x.index.values]
-    if ydist_file not in os.listdir(base_path + '/inputs/'):
-        make_dist_mat(y, ydist_file, base_path, newick_path = '/ete_tree/' + met_newick_name)
-    ydist = pd.read_csv(base_path + '/inputs/' + ydist_file, header = 0, index_col = 0)
-
-    x_fams = get_xtaxa(base_path + '/inputs/taxa_labels.csv', x)
-    y_class = get_ytaxa(base_path + '/inputs/metab_classes.csv', y, ydist, level='subclass')
-    # skbio_mds(ydist, y_class, path = base_path + '/figures/' + dtype + '-')
-    # skbio_mds(xdist, x_fams, path=base_path + '/figures/' + 'asvs-')
+#     x_fams = get_xtaxa(base_path + '/inputs/taxa_labels.csv', x)
+#     y_class = get_ytaxa(base_path + '/inputs/metab_classes.csv', y, ydist, level='subclass')
+#     # skbio_mds(ydist, y_class, path = base_path + '/figures/' + dtype + '-')
+#     # skbio_mds(xdist, x_fams, path=base_path + '/figures/' + 'asvs-')

@@ -1,3 +1,5 @@
+#!/Users/jendawk/miniconda3/envs/my-rdkit-env/bin python3
+
 import numpy as np
 import pandas as pd
 import os
@@ -18,69 +20,90 @@ from sklearn.manifold import MDS
 from scipy.spatial.distance import squareform, pdist
 import matplotlib.pyplot as plt
 import time
+# this script is used to return a distance matrix if you don't want to use classy-fire to calculate metabolomic distances
+# by calling the script and specifying the necessary arguments (see below where script is called also), script will
+# return a distance matrix given the metabolites in yfile that was calculated using the fingerprint and distance metric
+# specfied
+
 
 def tanimoto(a,b):
+    # Calculates tanimoto distance b/w fingerprints a and b
     both = np.sum(a*b)
     return both / ((np.sum(a) + np.sum(b)) - both)
 
 def dice(a, b):
+    # calculates dice distance b/w fingerprints a and b
     return 2*(np.sum(a * b)) / (np.sum(a) + np.sum(b))
 
 def cosine(a, b):
+    # calculates cosine distance b/w fingerprings a and b
     return np.sum(a* b) / (np.sqrt(np.sum(a)) * np.sqrt(np.sum(b)))
 
 def get_non_zero(vec):
+    # returns vector with zeros replaced with minimum non-zero value of vector
     vec_nzero = vec
     vec_nzero[vec == 0] = np.min(vec[vec != 0])
     return vec_nzero
 
 def get_distances(met_to_fingerprint, fingerprint_type, fingerprint_metric, fingerprint_metric_name):
-    if os.path.isfile('fingerprints/'+ fingerprint_type + '_' + fingerprint_metric_name +'.pkl'):
-        with open('fingerprints/'+ fingerprint_type  + '_' + fingerprint_metric_name + '.pkl', 'rb') as f:
-            df = pkl.load(f)
-    else:
-        df = {}
-        for met1, f1 in met_to_fingerprint.items():
-            if met1 not in df.keys():
-                df[met1] = {}
-            for met2, f2 in met_to_fingerprint.items():
-                if met2 in df[met1].keys():
-                    continue
-                else:
-                    if met2 not in df[met1].keys():
-                        if fingerprint_type != 'pubchem':
-                            # if 'morgan' in fingerprint_type or 'atom_pairs' in fingerprint_type:
-                            if fingerprint_metric_name == 'dice':
-                                df[met1][met2] = DataStructs.DiceSimilarity(f1, f2)
-                            elif fingerprint_metric_name == 'tanimoto':
-                                df[met1][met2] = DataStructs.TanimotoSimilarity(f1, f2)
-                            elif fingerprint_metric_name == 'cosine':
-                                df[met1][met2] = DataStructs.CosineSimilarity(f1, f2)
-                                # Sokal, Russel, Kulczynski, McConnaughey, and Tversky
-                            elif fingerprint_metric_name == 'sokal':
-                                df[met1][met2] = DataStructs.SokalSimilarity(f1, f2)
-                            elif fingerprint_metric_name == 'russel':
-                                df[met1][met2] = DataStructs.RusselSimilarity(f1, f2)
-                            elif fingerprint_metric_name == 'kulczynski':
-                                df[met1][met2] = DataStructs.KulczynskiSimilarity(f1, f2)
-                            elif fingerprint_metric_name == 'mcconnaughey':
-                                df[met1][met2] = DataStructs.McConnaugheySimilarity(f1, f2)
-                            elif fingerprint_metric_name == 'tversky':
-                                df[met1][met2] = DataStructs.TverskySimilarity(f1, f2)
-                            # else:
-                            #     df[met1][met2] = DataStructs.FingerprintSimilarity(f1, f2, fingerprint_metric)
+    # get distances given a dictionary that maps the metabolite to its fingerpring,
+    # the fingerprint type, distance metric, and distance metric name
 
-                            if met2 not in df.keys():
-                                df[met2] = {}
-                            df[met2][met1] = df[met1][met2]
-                        else:
-                            df[met1][met2] = fingerprint_metric(np.fromstring(f1, 'u1') - ord('0'), np.fromstring(f2, 'u1') - ord('0'))
-                            if met2 not in df.keys():
-                                df[met2] = {}
-                            df[met2][met1] = df[met1][met2]
+    # Save a dataframe of distances between each two metabolites
+    # (faster way to do this would be to use itertools.prod but whatever for now)
+    df = {}
+    for met1, f1 in met_to_fingerprint.items():
+        if met1 not in df.keys():
+            df[met1] = {}
+        for met2, f2 in met_to_fingerprint.items():
+            if met2 in df[met1].keys():
+                continue
+            else:
+                if met2 not in df[met1].keys():
+                    if fingerprint_type != 'pubchem':
+                        # if 'morgan' in fingerprint_type or 'atom_pairs' in fingerprint_type:
+                        if fingerprint_metric_name == 'dice':
+                            df[met1][met2] = DataStructs.DiceSimilarity(f1, f2)
+                        elif fingerprint_metric_name == 'tanimoto':
+                            df[met1][met2] = DataStructs.TanimotoSimilarity(f1, f2)
+                        elif fingerprint_metric_name == 'cosine':
+                            df[met1][met2] = DataStructs.CosineSimilarity(f1, f2)
+                            # Sokal, Russel, Kulczynski, McConnaughey, and Tversky
+                        elif fingerprint_metric_name == 'sokal':
+                            df[met1][met2] = DataStructs.SokalSimilarity(f1, f2)
+                        elif fingerprint_metric_name == 'russel':
+                            df[met1][met2] = DataStructs.RusselSimilarity(f1, f2)
+                        elif fingerprint_metric_name == 'kulczynski':
+                            df[met1][met2] = DataStructs.KulczynskiSimilarity(f1, f2)
+                        elif fingerprint_metric_name == 'mcconnaughey':
+                            df[met1][met2] = DataStructs.McConnaugheySimilarity(f1, f2)
+                        elif fingerprint_metric_name == 'tversky':
+                            df[met1][met2] = DataStructs.TverskySimilarity(f1, f2)
+                        # else:
+                        #     df[met1][met2] = DataStructs.FingerprintSimilarity(f1, f2, fingerprint_metric)
+
+                        if met2 not in df.keys():
+                            df[met2] = {}
+                        df[met2][met1] = df[met1][met2]
+                    else:
+                        df[met1][met2] = fingerprint_metric(np.fromstring(f1, 'u1') - ord('0'), np.fromstring(f2, 'u1') - ord('0'))
+                        if met2 not in df.keys():
+                            df[met2] = {}
+                        df[met2][met1] = df[met1][met2]
     return df
 
 def plot_MDS(dat, dmax=30, seed=0, path = '/Users/jendawk/Dropbox (MIT)/M2M/figures/'):
+    # Find the lowest dimension (up to dmax) at which the distribution of the embedded distances are not significantly
+    # different than the distribution of the original distances (i.e. p > 0.05 in a k2_samp test)
+    # inputs:
+    #   dat: distance matrix
+    #   dmax: max embedded dimension to look at
+    #   seed: random seed
+    #   path: path to put plots
+
+    # Returns the pvalues over each dimension and the locations at the best dimeanison
+
+    # Calculate the pvalue of the embedded distances vs the true distances using ks_2samp
     true_dist = squareform(dat)
     pvals = []
     locs = []
@@ -99,6 +122,7 @@ def plot_MDS(dat, dmax=30, seed=0, path = '/Users/jendawk/Dropbox (MIT)/M2M/figu
         print(ed)
         locs.append(xlocs)
 
+    # Plot the pvalues vs dimension
     best = np.argmax(pvals)
     plt.figure()
     plt.plot(np.arange(2, dmax), pvals)
@@ -109,6 +133,8 @@ def plot_MDS(dat, dmax=30, seed=0, path = '/Users/jendawk/Dropbox (MIT)/M2M/figu
     plt.savefig(path + 'mds.pdf')
     plt.close()
 
+    # Plot the embedded distances and original distances distributions at the dimension where the p-value is greater than
+    # 0.05 or (if the p-value is never greater) at the highest allowed dimension d-max
     d = np.where(np.array(pvals) > 0.05)[0]
     if len(d) == 0:
         d = best
@@ -128,34 +154,43 @@ def plot_MDS(dat, dmax=30, seed=0, path = '/Users/jendawk/Dropbox (MIT)/M2M/figu
 
 
 if __name__ == "__main__":
-    # path = 'fingerprints/'
-    # Sokal, Russel, Kulczynski, McConnaughey, and Tversky
+    # Returns a distance matrix saved to outpath given calculated on the metabolites in yfile using the specified
+    # fingerprint method and distance metric
+    # TO DO:
+    # - atom_paris and the morgan fingerprints don't seem to work yet; can figure out how to get them to work
     base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
     parser = argparse.ArgumentParser()
-    parser.add_argument("-fingerprint", "--fingerprint", help = 'fingerprint method', type = str, default = 'pubchem')
-    parser.add_argument("-metric", "--metric", help='fingerprint metric', type=str, default = 'dice')
-    parser.add_argument("-smiles_type", "--smiles_type", help='smiles type', type=str, default='isomeric')
-    parser.add_argument("-yfile", "--yfile", type = str)
+    parser.add_argument("-fingerprint", "--fingerprint",
+                        help = "fingerprint method; choices are: 'pubchem', 'RDK' or 'MACCS' ",
+                        type = str, default = 'pubchem')
+    parser.add_argument("-metric", "--metric",
+                        help="distance metric used to calculate distances between metabolic fingerprints"
+                             "Choices are: 'tanimoto', 'dice', or 'cosine' ",
+                        type=str, default = 'dice')
+    parser.add_argument("-smiles_type", "--smiles_type", help='smiles type; keep as isomeric', type=str, default='isomeric')
+    parser.add_argument("-yfile", "--yfile", type = str,
+                        help = 'filename for processed metabolomic data, distance matrix calculated for metabolites in yfile')
+    parser.add_argument("-o", "--outpath", type=str, help = 'path to save distance matrix to')
     args = parser.parse_args()
 
-    sm = pd.read_csv(base_path + 'inputs/' + args.yfile)
+    sm = pd.read_csv(base_path + 'inputs/processed/' + args.yfile)
     mets_keep = sm.columns.values
 
-    if not os.path.isdir(base_path + '/inputs/' + args.fingerprint):
-        os.mkdir(base_path + '/inputs/' + args.fingerprint)
+    if not os.path.isdir(base_path + '/inputs/processed/' + args.fingerprint):
+        os.mkdir(base_path + '/inputs/processed/' + args.fingerprint)
 
-    if os.path.isfile(base_path + '/inputs/' + args.fingerprint + '/met_to_fingerprint_sm.pkl'):
-        with open(base_path + '/inputs/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'rb') as f:
+    if os.path.isfile(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl'):
+        with open(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'rb') as f:
             met_to_fingerprint = pkl.load(f)
-        with open(base_path + '/inputs/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
+        with open(base_path + '/inputs/processed/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
             met_to_smiles = pkl.load(f)
 
 
     else:
-        with open(base_path + '/inputs/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
+        with open(base_path + '/inputs/processed/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
             met_to_smiles = pkl.load(f)
         if args.fingerprint == 'pubchem':
-            with open(base_path + '/inputs/' + args.fingerprint + '/met_to_fingerprint.pkl', 'rb') as f:
+            with open(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint.pkl', 'rb') as f:
                 init_met_to_fingerprint = pkl.load(f)
             met_to_fingerprint = {met: init_met_to_fingerprint[met] for met in mets_keep if met in init_met_to_fingerprint.keys()}
         else:
@@ -175,7 +210,7 @@ if __name__ == "__main__":
                 if args.fingerprint == 'morgan_FCFP4':
                     met_to_fingerprint[met] = AllChem.GetMorganFingerprint(m,2, useFeatures = True)
 
-        with open(base_path + '/inputs/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'wb') as f:
+        with open(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'wb') as f:
             pkl.dump(met_to_fingerprint, f)
 
     if args.fingerprint != 'pubchem':
@@ -195,19 +230,13 @@ if __name__ == "__main__":
         if args.metric == 'cosine':
             fingerprint_metric = cosine
 
-    if not os.path.isfile(base_path + '/inputs/' + args.fingerprint + '/' + args.metric + '-dist_sm.csv'):
+    if not os.path.isfile(base_path + '/inputs/processed/' + args.fingerprint + '/' + args.metric + '-dist_sm.csv'):
         dist_dict = get_distances(met_to_fingerprint, args.fingerprint, fingerprint_metric, args.metric)
         df = pd.DataFrame(dist_dict)
-        df.to_csv(base_path + '/inputs/' + args.fingerprint + '/' + args.metric + '-dist_sm.csv')
+        df.to_csv(args.o + args.fingerprint + '/' + args.metric + '-dist_sm.csv')
     else:
-        df = pd.read_csv(base_path + '/inputs/' + args.fingerprint + '/' + args.metric + '-dist_sm.csv', header=0, index_col=0)
+        df = pd.read_csv(args.o + args.fingerprint + '/' + args.metric + '-dist_sm.csv', header=0, index_col=0)
 
-    df = 1-df
-    if not os.path.isdir(base_path + 'figures/sm-' + args.fingerprint):
-        os.mkdir(base_path + 'figures/sm-' + args.fingerprint)
-    np.fill_diagonal(df.values, 0)
-    locs, pvals = plot_MDS(np.array(df), dmax=30, seed=0, path=base_path + 'figures/sm-' + args.fingerprint + '/' + args.metric)
-    print(pvals)
 
 
 
