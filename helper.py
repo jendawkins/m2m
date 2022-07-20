@@ -78,6 +78,12 @@ def euc_dist(x,y):
     # Calculates euclidean distance between x and y
     return np.sqrt(np.sum([(x[i] - y[i])**2 for i in range(len(x))]))
 
+def comb(n,k):
+    if k<= n:
+        return math.factorial(n) / (math.factorial(k) * math.factorial(n-k))
+    else:
+        return 0
+
 def pairwise_eval(guess, true):
     """
     Evaluates clusters when the cluster indices may be scrambled by evaluating each pair
@@ -97,21 +103,21 @@ def pairwise_eval(guess, true):
     true_dict = {i: true[i] for i in range(len(guess))}
     pairs = list(itertools.combinations(range(len(guess)),2))
     try:
-        tp_fp = np.sum([math.comb(np.sum(guess == i), 2) for i in np.unique(guess)])
+        tp_fp = np.sum([comb(np.sum(guess == i), 2) for i in np.unique(guess)])
         tp = len([i for i in range(len(pairs)) if guess_dict[pairs[i][0]]==guess_dict[pairs[i][1]] and
                   true_dict[pairs[i][0]]==true_dict[pairs[i][1]]])
         fp = tp_fp - tp
         tn = len([i for i in range(len(pairs)) if guess_dict[pairs[i][0]]!=guess_dict[pairs[i][1]] and
                   true_dict[pairs[i][0]]!=true_dict[pairs[i][1]]])
-        tn_fn = math.comb(guess.shape[0], 2) - tp_fp
+        tn_fn = comb(guess.shape[0], 2) - tp_fp
     except:
-        tp_fp = np.sum([math.comb(int(np.sum(guess[:,i])), 2) for i in np.arange(guess.shape[1])])
+        tp_fp = np.sum([comb(int(np.sum(guess[:,i])), 2) for i in np.arange(guess.shape[1])])
         tp = len([i for i in range(len(pairs)) if (guess_dict[pairs[i][0]]==guess_dict[pairs[i][1]]).all() and
                   (true_dict[pairs[i][0]]==true_dict[pairs[i][1]]).all()])
         fp = tp_fp - tp
         tn = len([i for i in range(len(pairs)) if (guess_dict[pairs[i][0]] != guess_dict[pairs[i][1]]).all() and
                   (true_dict[pairs[i][0]] != true_dict[pairs[i][1]]).all()])
-        tn_fn = math.comb(guess.shape[0],2)*guess.shape[1] - tp_fp
+        tn_fn = comb(guess.shape[0],2)*guess.shape[1] - tp_fp
 
     fn = tn_fn - tn
     ri = (tp + tn)/(tp + fp + tn + fn)

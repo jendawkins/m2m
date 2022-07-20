@@ -121,7 +121,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
             N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K,
             N_bug_clusters = args.L,meas_var = args.meas_var,
-            repeat_clusters= args.rep_clust, N_samples=args.N_samples, linear = args.linear,
+            repeat_clusters= 0, N_samples=args.N_samples, linear = args.linear,
             nl_type = args.nltype, dist_var_frac=args.dist_var_frac, xdim=args.xdim, ydim = args.ydim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
@@ -601,7 +601,7 @@ if __name__ == "__main__":
     parser.add_argument("-saf_type", "--saf_type", type=str, default='polar', help= 'if args.data == safari, which safari data type to run'
                                                                                     'options are: polar, lipids-neg, or lipids-pos')
 
-    # Filtering criteria
+    # Filtering criteria if args.data == 'cdi' or args.data == 'safari'
     parser.add_argument("-nzm", "--non_zero_perc_met", type=float, default=80,
                         help='percent of participants with non-zero metabolites in filtered data')
     parser.add_argument("-nzb", "--non_zero_perc_bug", type=float, default=15,
