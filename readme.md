@@ -53,3 +53,7 @@ python3 ./local_dispatcher_MAP.py -max_load 6
  - for now, stick to prior with pubchem fingerprints and tanimoto distance metric, where args.dtype = 'pubchem_tanimoto'
 ### Increase model ability to test different metabolic priors
 ### Determine best number of layers & nodes for neural network in non-linear model and assess how effectively the non-linear model is
+
+
+Note: to-do's that include running the model are more complicated than just running the model, since there's not a super clear way to determine how well the model is performing. I've been doing a lot about thinking about what to plot and output to figure out exactly how the model is doing and how to improve it 
+
