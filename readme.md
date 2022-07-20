@@ -45,3 +45,11 @@ Max load is the maximum number of models running in parallel.
 ```bash
 python3 ./local_dispatcher_MAP.py -max_load 6
 ```
+
+# Main To-Do's:
+### Re-think priors for measurement variance and radii
+### Run with additional datasets AND make model able to input various datasets more generally
+### Run with and without metabolite location prior 
+ - for now, stick to prior with pubchem fingerprints and tanimoto distance metric, where args.dtype = 'pubchem_tanimoto'
+### Increase model ability to test different metabolic priors
+### Determine best number of layers & nodes for neural network in non-linear model and assess how effectively the non-linear model is
