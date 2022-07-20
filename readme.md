@@ -2,6 +2,8 @@
 
 This repository contains scripts for predicting metabolite levels from microbial relative abundances
 
+See the overleaf pdf, "Joint_co_clustering_and_prediction.pdf" to see the mathematical model
+
 ## Conda environment
 To make a conda environment with the necessary packages & versions, run:
 ```bash
