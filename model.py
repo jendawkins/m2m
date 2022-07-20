@@ -12,7 +12,7 @@ import scipy
 # - r_bug and r_met prior distributions - maybe don't use gamma? dof shouldn't be fraction?
 class Model(nn.Module):
     def __init__(self, met_locs, microbe_locs, N_met, N_bug, K = 2, L = 3,
-                 alpha_temp = 1, omega_temp = 1,
+                 alpha_temp = 1, omega_temp = 1, data_meas_var = 1,
                  compute_loss_for = ['alpha','beta','w','z','mu_bug','r_bug','pi_bug','mu_met','r_met','pi_met'],
                  learn_num_met_clusters = False, learn_num_bug_clusters = False, linear = True,
                 p_nn = 1, sample_a = True, sample_w = True, met_class = None, bug_class = None, gmm = 0):
@@ -103,6 +103,8 @@ class Model(nn.Module):
         self.p_nn = p_nn
         # number of microbe and metabolite clusters
         self.L, self.K = L, K
+        # Measurment variance of data
+        self.data_meas_var = data_meas_var
 
         # If we learn the number of microbe/metabolite clusters and met_class is not None and bug_class is not None,
         # set the number of metabolomic clusters to the number of unique metabolite classes and the number of microbes
@@ -274,7 +276,7 @@ class Model(nn.Module):
         self.seed = seed
         # self.sigma is the measurement variance, initialized to be the log of the measurement variance (since we will
         # transform it to exp(self.sigma))
-        self.sigma = nn.Parameter(torch.log(torch.tensor(self.params['sigma']['scale']).float()), requires_grad=True) # measurement variance
+        self.sigma = nn.Parameter(torch.log(torch.tensor(self.data_meas_var).float()), requires_grad=True) # measurement variance
         if self.linear:
             # regression weights beta
             temp = Normal(0,1).sample([self.L+1, self.K])

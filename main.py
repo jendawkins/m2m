@@ -1,4 +1,4 @@
-#!/Users/jendawk/miniconda3/envs/M2M_CodeBase/bin python3
+# #!/Users/jendawk/miniconda3/envs/M2M_CodeBase/bin python3
 from torch.distributions.dirichlet import Dirichlet
 from helper import *
 from plot_helper import *
@@ -8,14 +8,16 @@ import re
 from data_gen import *
 import sys
 from dataLoader import *
+# from rdk.rdk_fingerprints import *
 
 import subprocess
 from sklearn.cluster import KMeans
 import scipy
 from torch.distributions.half_normal import HalfNormal
 from safariLoader import *
-import datetime
 from model import *
+import datetime
+from ete_tree.tree_plotter import *
 
 def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_path = '', plot_params = True,
                 met_class = None, bug_class = None):
@@ -104,7 +106,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
     # add all other specified inputs to path to prevent overwriting results & keep a record of the parameters each model is run with
     info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
-           '-l1'*(args.l1) + '-'*(1-args.linear) +args.nltype*(1-args.linear)*args.syn + '-lm'*args.lm + '-lb'*args.lb + \
+            '-'*(1-args.linear) +args.nltype*(1-args.linear)*(args.data=='synthetic') + '-lm'*args.lm + '-lb'*args.lb + \
             '-meas_var' + str(np.round(args.meas_var,3)).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
            '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
            '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_')
@@ -120,7 +122,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K,
             N_bug_clusters = args.L,meas_var = args.meas_var,
             repeat_clusters= args.rep_clust, N_samples=args.N_samples, linear = args.linear,
-            nl_type = args.nltype, dist_var_frac=args.dist_var_perc, embedding_dim=args.dim)
+            nl_type = args.nltype, dist_var_frac=args.dist_var_frac, xdim=args.xdim, ydim = args.ydim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
 
@@ -241,24 +243,20 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             asv_ix = seqs[asv_ix]
         if not isinstance(asv_ix[0], str):
             asv_ix = [str(a) for a in asv_ix]
-        inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree_init.pdf',
-                  "-out", path + '/init_clusters/', "-newick", base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
-                  "-feat"]
-        inputs.extend(asv_ix)
-        # print(inputs)
-        if args.safari == 0 and args.syn == 0:
-            subprocess.run(inputs, cwd=base_path + "/ete_tree")
+        if args.data == 'cdi':
+            plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+                          out_path= path + '/init_clusters/', data_path=base_path + '/inputs/' + args.data + '/',
+                          taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree_init.pdf')
     for met_clust in active_met_clust:
         met_ix = np.where(best_z[:, met_clust] != 0)[0]
         if metabs is not None:
             met_ix = metabs[met_ix]
         if not isinstance(met_ix[0], str):
             met_ix = [str(a) for a in met_ix]
-        inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree_init.pdf',
-                  "-out", path + '/init_clusters/', "-newick", base_path + '/ete_tree/w1_newick_tree.nhx', "-feat"]
-        inputs.extend(met_ix)
-        if args.safari == 0 and args.syn == 0:
-            subprocess.run(inputs, cwd=base_path + "/ete_tree")
+
+        if args.data == 'cdi':
+            plot_metab_tree(mets_keep = met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
+                            out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
 
     # If embedding dimension = 2 and we have embedded locations input, plot output locations
     if a_met is not None and args.xdim == 2 and args.ydim == 2:
@@ -383,7 +381,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
 
         # at the last epoch, or at each 5000 epochs, plot results
-        if epoch == last_epoch or epoch % 5000 == 0:
+        if epoch == last_epoch or epoch % 5000 == 0 and epoch > 1:
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
 
             # Make new path for new results
@@ -416,13 +414,12 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 pd.DataFrame(param_dict[args.seed]['w'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'omega.csv')
 
             # plot output locations if synthetic data
-            if args.syn:
+            if args.data == 'synthetic':
                 plot_output_locations(path, net, best_mod, param_dict[args.seed], args.seed, plot_zeros = False)
 
-            if not args.syn:
+            else:
 
                 # Plot each learned cluster's phylogenetic tree and metabolic classification tree
-                met_newick_name = 'newick_' + args.yfile.split('.csv')[0] + '.nhx'
                 active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
                     set(np.where(np.sum(best_alpha,1)!= 0)[0])))
                 active_met_clust = np.where(np.sum(best_z,0) != 0)[0]
@@ -434,12 +431,16 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     asv_df['Cluster ' + str(asv_clust)] = asv_ix
                     if not isinstance(asv_ix[0], str):
                         asv_ix = [str(a) for a in asv_ix]
-                    inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree.pdf',
-                         "-out", path + 'seed' + str(args.seed) + '-clusters/',
-                              "-newick",base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx', "-feat"]
-                    inputs.extend(asv_ix)
-                    if args.safari == 0 and args.syn == 0:
-                        subprocess.run(inputs,cwd=base_path + "/ete_tree")
+                    if args.data == 'cdi':
+                        plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+                                      out_path=path + 'seed' + str(args.seed) + '-clusters/', data_path=base_path + '/inputs/' + args.data + '/',
+                                      taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree.pdf')
+                    # inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree.pdf',
+                    #      "-out", path + 'seed' + str(args.seed) + '-clusters/',"-data_path", base_path + '/inputs/' + args.data + '/',
+                    #           "-newick",base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx', "-feat"]
+                    # inputs.extend(asv_ix)
+                    # if args.data == 'cdi':
+                    #     subprocess.run(inputs,cwd=base_path + "/ete_tree")
                 if len(active_met_clust) > 20:
                     active_met_clust = active_met_clust[:20]
                 met_df = {}
@@ -450,12 +451,14 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     met_df['Cluster ' + str(met_clust)] = met_ix
                     if not isinstance(met_ix[0], str):
                         met_ix = [str(a) for a in met_ix]
-                    inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree.pdf',
-                         "-out", path+ 'seed' + str(args.seed) + '-clusters/',
-                              "-newick", base_path + '/ete_tree/' + met_newick_name,"-feat"]
-                    inputs.extend(met_ix)
-                    if args.safari == 0 and args.syn == 0:
-                        subprocess.run(inputs,cwd=base_path + "/ete_tree")
+                    # inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree.pdf',
+                    #      "-out", path+ 'seed' + str(args.seed) + '-clusters/', "-data_path", base_path + '/inputs/' + args.data + '/',
+                    #           "-newick", base_path + '/ete_tree/' + args.met_newick_name,"-feat"]
+                    # inputs.extend(met_ix)
+                    if args.data == 'cdi':
+                        plot_metab_tree(mets_keep=met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
+                                        out_path= path+ 'seed' + str(args.seed) + '-clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree.pdf')
+                        # subprocess.run(inputs,cwd=base_path + "/ete_tree")
 
                 temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
                 temp.to_csv(path + str(args.seed) + 'mets_in_clusters.csv')
@@ -559,7 +562,7 @@ if __name__ == "__main__":
     parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 3)
     parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 3)
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
-    parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 10000)
+    parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
     parser.add_argument("-load", "--load", help="0 to not load model, 1 to load model", type=int, default = 0)
     parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 0)
@@ -572,12 +575,13 @@ if __name__ == "__main__":
                                'choices are: exp, poly, sine, linear, sigmoid')
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1,
                         help = "whether to adjust the learning rate based on the size of the parameter")
-    parser.add_argument("-dist_var_perc", "--dist_var_perc", type=float, default=0.5,
+    parser.add_argument("-dist_var_frac", "--dist_var_frac", type=float, default=0.5,
                         help = "if generating data, how far apart to generate embedding points within a cluster. "
                                "0.1 = very close, 0.9 = far")
     parser.add_argument("-p_num", "--p_num", type=int, default=1,
                         help = "if non-linear, how many neural networks per microbe cluster - metabolite cluster interaction"
                                "(i.e. p=1 means 1 NN per each interaction)")
+
     parser.add_argument("-xdim", "--xdim", type=int, default=2, help = 'embedding dimension for microbes')
     parser.add_argument("-ydim", "--ydim", type=int, default=2, help = 'embedding dimension for metabolites')
     parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.3, -3], help = 'annealing for alpha temparature')
@@ -586,33 +590,52 @@ if __name__ == "__main__":
                         help = 'true= use true microbe and metabolite embedded locations; '
                                                                                'none= dont use locations;'
                                                                                'rand= use random locations;')
-    parser.add_argument("-dtype", "--dtype", type=str, default='',
-                        help = "which type of distance embedding to use, choices are:" 
-                               " 'stratified', 'clumps', '', 'pubchem', 'RDK','MACCS' ")
-    parser.add_argument("-dim", "--dim", type=float, default=2, help = 'embedding dimension if using synthetic data')
-    parser.add_argument("-syn", "--syn", type=int, default=0, help = 'whether or not to use synthetic data')
-    parser.add_argument("-yfile", "--yfile", type=str, default='y_high_corr.csv', help = 'which y data file to use')
     parser.add_argument("-gmm", "--gmm", type=int, default=0, help = 'whether to run as gaussian mixture model or not '
                                                                      '(i.e. if 1, zero out input and just cluster metabolites)')
-    parser.add_argument("-safari", "--safari", type=int, default=1, help = 'whether to run with safari data or not')
-    parser.add_argument("-saf_type", "--saf_type", type=str, default='polar', help= 'if safari == 1, which safari data type to run')
-    parser.add_argument("-most_corr", "--most_corr", type=int, default = 1,
-                        help = 'if safari == 1, whether to use the data with high correlation bw microbes and metabolites or not')
+    parser.add_argument("-dtype", "--dtype", type=str, default='pubchem_tanimoto',
+                        help = "which type of distance embedding to use, choices are:" 
+                               " 'stratified', 'clumps', '', 'pubchem_tanimoto', 'RDK_tanimoto','MACCS_tanimoto' ")
+    parser.add_argument("-data", "--data", type = str, default = 'cdi', help = "which input data to use; choices are: "
+                                                                               "'cdi', 'safari', 'synthetic' ")
+
+    parser.add_argument("-saf_type", "--saf_type", type=str, default='polar', help= 'if args.data == safari, which safari data type to run'
+                                                                                    'options are: polar, lipids-neg, or lipids-pos')
+
+    # Filtering criteria
+    parser.add_argument("-nzm", "--non_zero_perc_met", type=float, default=80,
+                        help='percent of participants with non-zero metabolites in filtered data')
+    parser.add_argument("-nzb", "--non_zero_perc_bug", type=float, default=15,
+                        help='percent of participants with non-zero microbes in filtered data')
+    parser.add_argument("-cvm", "--coef_var_perc_met", type=float, default=5,
+                        help='coefficient of variation percentile for metabolites')
+    parser.add_argument("-cvb", "--coef_var_perc_bug", type=float, default=0,
+                        help='coefficient of variation percentile for microbes')
+
+
+    parser.add_argument("-most_corr", "--most_corr", type=int, default = 0,
+                        help = 'whether to use the data with high correlation bw microbes and metabolites or not')
+
+
     args = parser.parse_args()
     print(sys.executable)
-    args.case = args.locs + '_' + args.case
+
+    args.case = args.data + '_' + args.locs + '_' + args.case
     dtype = args.dtype
     base_path = os.getcwd()
     if '/M2M' not in base_path:
-        base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
+        base_path = '/Users/jendawk/M2M/'
     if not os.path.isdir(base_path + '/outputs/'):
         os.mkdir(base_path + '/outputs/')
     if not os.path.isdir(base_path + '/outputs/' + args.case):
         os.mkdir(base_path + '/outputs/' + args.case)
-    gen_data = args.syn==1
-    if args.safari==1 and args.syn==0:
+
+    args.raw_data_path = '/inputs/' + args.data + '/'
+    # If args.data == 'synthetic', generate synthetic data
+    if args.data == 'safari':
         # TO DO: calculate and use actual measurement variance of safari data, not just 0.1 default
-        met_dict, asv_dict, res_dict = load_safari_data(met_frac = 0.9, bug_frac = 0.15)
+        met_dict, asv_dict, res_dict = load_safari_data(data_path= base_path + args.raw_data_path,
+                                                        out_path = base_path + '/inputs/processed/',
+            met_frac = args.non_zero_perc_met/100, bug_frac = args.non_zero_perc_bug/100)
         y = met_dict[args.saf_type]['log_std_filt']
         x = asv_dict['ra_filt']
         if args.most_corr:
@@ -632,47 +655,28 @@ if __name__ == "__main__":
         args.N_samples = y.shape[0]
         ylocs, xlocs, y_class, x_fams = None, None, None, None
 
-    elif not gen_data:
-        # args.case = args.case + '_100Bvar'
+    elif args.data == 'cdi':
         calc_dim = True
-        xfile = 'x_high_corr.csv'
-        yfile = args.yfile
-        xdist_file = 'x_dist.csv'
-        if '_' in dtype:
-            ydist_file = dtype.split('_')[0] + '/' + dtype.split('_')[1] + '-dist.csv'
-        else:
-            ydist_file = 'y' + dtype + '_dist.csv'
-        # ydist_file =
-        met_newick_name = 'newick_' + args.yfile.split('.csv')[0] + '.nhx'
+        if args.most_corr == 1:
+            xfile = 'x_high_corr.csv'
+            yfile = 'y_high_corr.csv'
 
-        # set data_path to point to directory with data
-        data_path = base_path + "/inputs/processed/"
+        else:
+            yfile = 'y_' + str(int(args.non_zero_perc_met)) + '_' + str(int(args.coef_var_perc_met)) + '.csv'
+            xfile = 'x_' + str(int(args.non_zero_perc_bug)) + '_' + str(int(args.coef_var_perc_bug)) + '.csv'
+
+        args.met_newick_name = 'newick_' + yfile.split('.csv')[0] + '.nhx'
+
         # Option to change filtering criteria
-        if xfile not in os.listdir(data_path) or yfile not in os.listdir(data_path):
-            load_data(base_path, xfile, yfile, dataLoader)
-        x = pd.read_csv(data_path + '/' + xfile, index_col = [0])
-        if yfile not in os.listdir(data_path):
-            ml = metabLoader(non_zero_perc=int(yfile.split('-')[1]), meas_thresh=0,
-                             var_perc=int(yfile.split('-')[-1].split('.')[0]), week=1)
-            y = ml.data['x']
-            y.to_csv(data_path + '/' + yfile, index_col = 0)
-        else:
-            y = pd.read_csv(data_path + '/' + yfile, index_col = [0])
-        y = y.loc[x.index.values]
+        if xfile not in os.listdir(base_path + "/inputs/processed/") or yfile not in os.listdir(base_path + "/inputs/processed/"):
+            load_data(xfile, yfile, dataLoader,data_path=base_path +args.raw_data_path, out_path = base_path + "/inputs/processed/", )
 
-        if yfile.split('.')[0] + '-mvar.pkl' not in os.listdir(data_path):
-            ml = metabLoader(non_zero_perc=0, meas_thresh=0, var_perc=0, week=1)
-            raw_dat = ml.cdiff_dat
-            replicate_ixs = [d for d in raw_dat.index.values if not d.split('-')[1].split('.')[-1].isnumeric()]
-            repeat_dat = raw_dat[y.columns.values].loc[replicate_ixs]
-            y_raw = ml.data_ntr_filt['x']
-            rep_pts = [ix.split('-')[0] for ix in replicate_ixs]
-            unique_ixs = np.unique(rep_pts)
-            rep_list = [repeat_dat.loc[[ix for ix in replicate_ixs if ix.split('-')[0] == unique_ix]] for unique_ix in
-                        unique_ixs]
-            pooled_var = get_meas_var(y_raw, rep_list)
-            with open(data_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'wb') as f:
-                pkl.dump(pooled_var, f)
+        # set data_path to point to directory with processed data
+        data_path = base_path + "/inputs/processed/"
+        x = pd.read_csv(data_path + '/' + xfile, index_col = [0])
+        y = pd.read_csv(data_path + '/' + yfile, index_col=[0])
+
+        y = y.loc[x.index.values]
 
         with open(data_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'rb') as f:
             args.meas_var = pkl.load(f)
@@ -683,35 +687,72 @@ if __name__ == "__main__":
 
         print(x.shape)
         print(y.shape)
-        make_tree(x.columns.values, base_path, args.case, 'asv',
-                  newick_path='/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx')
-        make_tree(y.columns.values, base_path, args.case, 'metab_orig', newick_path='/ete_tree/' + met_newick_name,
-                  dist_type=dtype)
+        plot_asv_tree(newick_path=base_path +'/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+                      out_path=base_path + '/outputs/' + args.case, data_path = base_path + '/' + args.raw_data_path,
+                      name = 'init_phylo_tree.pdf', taxa_keep = x.columns.values)
+
+        try:
+            plot_orig_metab_tree(out_path = base_path + '/outputs/' + args.case, name = 'init_metab_tree.pdf',
+                                 data_path = base_path + '/' + args.raw_data_path, newick_path = base_path +'/ete_tree/' + args.met_newick_name,
+                                 dist_type = dtype, in_mets = y.columns.values)
+        except:
+            print('cant plot metab tree')
+
 
         if args.locs == 'true':
+            xdist_file = xfile.split('.')[0] + '-dist.csv'
             if xdist_file not in os.listdir(base_path + '/inputs/processed/'):
-                make_dist_mat(x, xdist_file, base_path, outfile = base_path + '/inputs/processed/',
-                              newick_path = '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx')
+                get_dist(x.columns.values, newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+                         out_path=base_path+'/inputs/processed/', name = xdist_file)
             xdist = pd.read_csv(base_path + '/inputs/processed/' + xdist_file, header=0, index_col=0)
             xdist = xdist / np.max(np.max(xdist))
+            x = x[xdist.columns.values]
 
-            if ydist_file not in os.listdir(base_path + '/inputs/processed/'):
-                make_dist_mat(y, ydist_file, base_path, newick_path = '/ete_tree/' + met_newick_name,
-                              yfile = yfile, outfile = base_path + '/inputs/processed/')
+            if '_' in dtype:
+                ydist_file = dtype.split('_')[0] + '/' + dtype.split('_')[1] + '-dist.csv'
+            else:
+                ydist_file = 'y' + '-' + yfile.split('.')[0] + '-' + dtype + '_dist.csv'
+
+            if ydist_file.split('/')[-1] not in os.listdir(base_path + '/inputs/processed/' + ydist_file.split('/')[0]):
+                if '_' in args.dtype:
+                    in_list = ["python3", "rdk_fingerprints.py", "-fingerprint", dtype.split('_')[0],
+                               "-metric", dtype.split('_')[1], "-yfile", yfile, '-o', base_path+'/inputs/processed/',
+                               "-ydist_file", ydist_file, "-b", base_path]
+                    subprocess.run(in_list, cwd=base_path + '/rdk')
+                else:
+                    get_dist(y.columns.values, newick_path=base_path +'/ete_tree/' + args.met_newick_name,
+                             out_path=base_path+'/inputs/processed/', name = ydist_file)
             ydist = pd.read_csv(base_path + '/inputs/processed/' + ydist_file, header = 0, index_col = 0)
             ydist = 1- (ydist / np.max(np.max(ydist)))
 
-            if calc_dim:
+            if ydist.shape[0] != y.shape[1]:
+                try:
+                    ixs = list(set(y.columns.values).intersection(ydist.columns.values))
+                    y = y[ixs]
+                    ydist = ydist[ixs].loc[ixs]
+                except:
+                    y.columns = [edit_string(ii) for ii in y.columns.values]
+                    ixs = list(set(y.columns.values).intersection(ydist.columns.values))
+                    y = y[ixs]
+                    ydist = ydist[ixs].loc[ixs]
+
+            print(x.shape)
+            print(y.shape)
+            if args.xdim is None:
                 args.xdim, xlocs, xstress = mds_choose_d(xdist,seed = args.seed)
-                args.ydim, ylocs, ystress = mds_choose_d(ydist, seed=args.seed)
             else:
                 embedding = MDS(n_components=args.xdim, dissimilarity='precomputed', random_state=args.seed)
                 xlocs = embedding.fit_transform(xdist)
+
+            if args.ydim is None:
+                args.ydim, ylocs, ystress = mds_choose_d(ydist, seed=args.seed)
+            else:
                 embedding = MDS(n_components=args.ydim, dissimilarity='precomputed', random_state=args.seed)
                 ylocs = embedding.fit_transform(ydist)
 
-            x_fams = get_xtaxa(base_path + '/inputs/taxa_labels.csv', x)
-            y_class = get_ytaxa(base_path + '/inputs/processed/classy-fire/classy_fire_df.csv', y.columns.values, ydist, level='subclass')
+            x_fams = get_xtaxa(base_path + '/' + args.raw_data_path + '/taxa_labels.csv', x)
+            y_class = get_ytaxa(base_path + '/' + args.raw_data_path + '/classy_fire_df.csv', y.columns.values,
+                                ydist, level='subclass')
 
             xlocs = (xlocs - np.mean(xlocs, 0))/np.std(xlocs,0)
             ylocs = (ylocs - np.mean(ylocs, 0))/np.std(ylocs, 0)

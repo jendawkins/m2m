@@ -10,7 +10,7 @@ from helper import *
 data_path = '/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/Safari_data/'
 out_path = '/Users/jendawk/Dropbox (MIT)/M2M/inputs/processed/'
 
-def load_safari_data(data_path='/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/Safari_data/',
+def load_safari_data(data_path='/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/safari/',out_path = out_path,
                      met_frac=0.9, bug_frac = 0.15):
     # This function:
     #   - Loads the safari data given the input data path

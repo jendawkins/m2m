@@ -532,11 +532,11 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
     df = pd.DataFrame(fit_df).T
     if not os.path.isfile(path + 'rfit.txt'):
         with open(path + '-avg-rho.txt', 'w') as f:
-            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
+            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
                     str(np.round(np.std(df['r-squared value']), 3)) + '\n')
     else:
         with open(path + '-avg-rho.txt', 'a') as f:
-            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['rvalue']), 3)) +  ' +- ' +
+            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
                     str(np.round(np.std(df['r-squared value']), 3)) + '\n')
 
     return x_dict, y_dict

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<parameters>
+<parameter name="ANALOG_SEARCH">0</parameter>
+<parameter name="FILTER_LIBRARY">1</parameter>
+<parameter name="FILTER_PRECURSOR_WINDOW">1</parameter>
+<parameter name="FILTER_SNR_PEAK_INT">0.0</parameter>
+<parameter name="FILTER_STDDEV_PEAK_INT">0.0</parameter>
+<parameter name="FORCE_EXACT_MATCH">1</parameter>
+<parameter name="MAXIMUM_COMPONENT_SIZE">100</parameter>
+<parameter name="MAX_SHIFT">500</parameter>
+<parameter name="MAX_SHIFT_MASS">100.0</parameter>
+<parameter name="MIN_MATCHED_PEAKS">6</parameter>
+<parameter name="MIN_PEAK_INT">0.0</parameter>
+<parameter name="PAIRS_MIN_COSINE">0.7</parameter>
+<parameter name="QUANT_TABLE_SOURCE">MSHUB</parameter>
+<parameter name="SCORE_THRESHOLD">0.5</parameter>
+<parameter name="SEARCH_LIBQUALITY">3</parameter>
+<parameter name="TOPK">10</parameter>
+<parameter name="TOP_K_RESULTS">1</parameter>
+<parameter name="WINDOW_FILTER">1</parameter>
+<parameter name="desc">Library Search/Networking of 6026c3aae6d747b088d1c095aee2afa8 MSHub Deconvolution</parameter>
+<parameter name="email">rgregor@mit.edu</parameter>
+<parameter name="library_on_server">d.CCMS_SpectralLibraries/GNPS_GC_Libraries;</parameter>
+<parameter name="mshub_balance_scores">t.6026c3aae6d747b088d1c095aee2afa8/preprocessing_scratch/data_integrals.csv;</parameter>
+<parameter name="quantification_table">t.6026c3aae6d747b088d1c095aee2afa8/quantification_output;</parameter>
+<parameter name="runKovats">off</parameter>
+<parameter name="spec_on_server">t.6026c3aae6d747b088d1c095aee2afa8/clustered_mgf;</parameter>
+<parameter name="task">bfc886e5c9bb4724bef7e6292271727b</parameter>
+<parameter name="tolerance.Ion_tolerance">0.5</parameter>
+<parameter name="tolerance.PM_tolerance">20000</parameter>
+<parameter name="upload_file_mapping">spec-00000.mgf|6026c3aae6d747b088d1c095aee2afa8/clustered_mgf/specs_ms.mgf</parameter>
+<parameter name="upload_file_mapping">lib-00000.mgf|CCMS_SpectralLibraries/GNPS_GC_Libraries/GC-MONA/GC-MONA.mgf</parameter>
+<parameter name="upload_file_mapping">lib-00001.mgf|CCMS_SpectralLibraries/GNPS_GC_Libraries/GC-FIEHN/GC-FIEHN.mgf</parameter>
+<parameter name="upload_file_mapping">lib-00002.mgf|CCMS_SpectralLibraries/GNPS_GC_Libraries/GC-BORISOV-COMPILATION/GC-BORISOV-COMPILATION.mgf</parameter>
+<parameter name="upload_file_mapping">lib-00003.mgf|CCMS_SpectralLibraries/GNPS_GC_Libraries/GC-HMDB/GC-HMDB.mgf</parameter>
+<parameter name="upload_file_mapping">lib-00004.mgf|CCMS_SpectralLibraries/GNPS_GC_Libraries/GC-VOCBINBASE/GC-VOCBINBASE.mgf</parameter>
+<parameter name="upload_file_mapping">quantification_table-00000.csv|6026c3aae6d747b088d1c095aee2afa8/quantification_output/quantification.csv</parameter>
+<parameter name="upload_file_mapping">mshub_balance_scores-00000.csv|6026c3aae6d747b088d1c095aee2afa8/preprocessing_scratch/data_integrals.csv</parameter>
+<parameter name="user">rgregor</parameter>
+<parameter name="uuid">1E49753A-5B3F-0001-C14F-28201E001E80</parameter>
+<parameter name="workflow">MOLECULAR-LIBRARYSEARCH-GC</parameter>
+<parameter name="workflow_version">release_30</parameter>
+</parameters>

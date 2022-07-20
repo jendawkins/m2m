@@ -1,4 +1,4 @@
-#!/Users/jendawk/miniconda3/envs/ete_env/bin python3
+# #!/Users/jendawk/miniconda3/envs/ete_env/bin python3
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -21,7 +21,6 @@ def get_dist(seqs, newick_path=base_path + '/ete_tree/phylo_placement/output/new
     #  - seqs: the sequences or metabolites to get a distance matrix for
     # - newick_path: the path of the newick tree (seqs needs to match the leaves on the newick tree)
     # - out_path: the path to save the distance matrix to
-    out_path = out_path + '/classy-fire/'
     t = ete3.TreeNode(newick_path)
     nodes = [n.name for n in t.traverse() if n.is_leaf()]
     dist = {}
@@ -101,7 +100,6 @@ def plot_metab_tree(mets_keep, newick_path=base_path + '/ete_tree/w1_newick_tree
     # inputs:
     # - newick_path: path of the newick tree
     # - out_path: path to save the tree plot
-    # - data_path: path of the taxonomic labels
     # - mets_keep: which metabolites to plot labels of on the tree
     # - name: name of the tree plot file
 
@@ -120,14 +118,14 @@ def plot_metab_tree(mets_keep, newick_path=base_path + '/ete_tree/w1_newick_tree
     plt.close()
 
 def plot_orig_metab_tree(out_path=base_path + '/outputs', name='mets_in.pdf', in_mets = None,
-                         in_path = base_path + '/inputs/processed/',
+                         data_path = base_path + '/inputs/processed/',
                          newick_path = base_path + '/ete_tree/w1_newick_tree.nhx', dist_type = ''):
 
     # Constructs the metabolomic tree given the input metabolites and the classy-fire classifications
     # inputs:
     # - newick_path: path to save the newick tree to
     # - out_path: path to save the tree plot
-    # - in_path: path for the input processed data
+    # - data_path: path for the classy fire data
     # - in_mets: which metabolites to use in making the tree
     # - name: name of the tree plot file
     # - dist_type: How to construct the distance between branches of the tree; options:
@@ -135,7 +133,7 @@ def plot_orig_metab_tree(out_path=base_path + '/outputs', name='mets_in.pdf', in
     #           'clumps': set branch distance = 1 if within the same level 5 classification, or distance = 100 if not
     #           'stratified': increase branch distance exponentially with increasing classification levels
 
-    met_classes = pd.read_csv(in_path + '/classy-fire/classy_fire_df.csv', index_col = 0, header = 0).T
+    met_classes = pd.read_csv(data_path + 'classy_fire_df.csv', index_col = 0, header = 0).T
 
     if dist_type == 'stratified':
         vals = [i**2 for i in range(1, met_classes.shape[1])]
@@ -218,6 +216,7 @@ if __name__ == "__main__":
     parser.add_argument("-newick", "--newick", type = str)
     parser.add_argument("-feat", "--feat", nargs = '+', type = str)
     parser.add_argument("-dtype", "--dtype", type = str)
+    parser.add_argument("-data_path", "--data_path", type=str, default = '')
     args = parser.parse_args()
 
     if args.out is not None:
@@ -227,17 +226,19 @@ if __name__ == "__main__":
         if args.fun == 'dist':
             get_dist(args.feat, out_path=args.out, name=args.name, newick_path = args.newick)
         if args.fun == 'metab_orig':
-            plot_orig_metab_tree(name = args.name, in_mets = args.feat, out_path=args.out, newick_path = args.newick, dist_type = args.dtype)
+            plot_orig_metab_tree(name = args.name, in_mets = args.feat, out_path=args.out, newick_path = args.newick,
+                                 dist_type = args.dtype, data_path=args.data_path)
         if args.fun == 'metab':
             plot_metab_tree(mets_keep = args.feat, name=args.name, out_path=args.out, newick_path = args.newick)
         if args.fun == 'asv':
-            plot_asv_tree(taxa_keep=args.feat,name = args.name, out_path=args.out, newick_path = args.newick)
+            plot_asv_tree(taxa_keep=args.feat,name = args.name, out_path=args.out, newick_path = args.newick,
+                          data_path=args.data_path)
     else:
         if args.fun == 'dist':
             get_dist(args.feat, name=args.name, newick_path = args.newick)
         if args.fun == 'metab_orig':
-            plot_orig_metab_tree(name = args.name, in_mets = args.feat, newick_path = args.newick, dist_type = args.dtype)
+            plot_orig_metab_tree(name = args.name, in_mets = args.feat, newick_path = args.newick, dist_type = args.dtype,data_path=args.data_path)
         if args.fun == 'metab':
             plot_metab_tree(mets_keep = args.feat, name=args.name, newick_path = args.newick)
         if args.fun == 'asv':
-            plot_asv_tree(taxa_keep=args.feat,name = args.name, newick_path = args.newick)
+            plot_asv_tree(taxa_keep=args.feat,name = args.name, newick_path = args.newick,data_path=args.data_path)

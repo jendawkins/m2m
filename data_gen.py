@@ -8,7 +8,7 @@ import datetime
 def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clusters = 2, N_bug_clusters = 2,
                             N_local_clusters=1, state = 3,
                             beta_var = 2, cluster_disparity = 100, meas_var = 0.001,
-                            cluster_per_met_cluster = 0, repeat_clusters = 1,embedding_dim = 2,
+                            cluster_per_met_cluster = 0, repeat_clusters = 1,xdim = 2, ydim = 2,
                             deterministic = True, linear = False, nl_type = "linear",dist_var_frac = 0.9,
                             overlap_frac = 0.5, cluster_std = 1):
 
@@ -43,7 +43,8 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     for n in range(N_clusters_by_dist-1):
         chosen = np.random.choice(choose_from, int((N_bug/N_clusters_by_dist)),replace = False)
         if repeat_clusters==1:
-            choose_from = np.array(list(set(choose_from) - set(chosen)) + list(np.random.choice(chosen, np.int(len(chosen)*overlap_frac))))
+            choose_from = np.array(list(set(choose_from) - set(chosen)) +
+                                   list(np.random.choice(chosen, np.int(len(chosen)*overlap_frac))))
         else:
             choose_from = np.array(list(set(choose_from) - set(chosen)))
         bug_gp_ids.append(chosen)
@@ -66,9 +67,9 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     dist_bug = dist_bug / np.max(np.max(dist_bug))
 
     # Generate cluster embedded locations
-    embedding = MDS(n_components=embedding_dim, dissimilarity='precomputed', random_state=state)
+    embedding = MDS(n_components=xdim, dissimilarity='precomputed', random_state=state)
     met_locs = embedding.fit_transform(dist_met)
-    embedding = MDS(n_components=embedding_dim, dissimilarity='precomputed', random_state=state)
+    embedding = MDS(n_components=ydim, dissimilarity='precomputed', random_state=state)
     bug_locs = embedding.fit_transform(dist_bug)
 
     met_locs = (met_locs - np.mean(met_locs, 0)) / np.std(met_locs, 0)

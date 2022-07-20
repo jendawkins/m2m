@@ -1,144 +1,9 @@
-#!/Users/jendawk/miniconda3/envs/M2M_CodeBase/bin python3
+# #!/Users/jendawk/miniconda3/envs/M2M_CodeBase/bin python3
 from helper import *
 import pandas as pd
 import numpy as np
 
-# This script loads, filters, and transforms the CDI data, and contains:
-# - metabLoader(): basically the same as dataLoader() below, but loads, filters, and transforms only metabolite data
-#       (I only made this because I
-#       was trying out a lot of different filtering for the metabolites and it was quicker just to reload the metabolite
-#       data each time
-# - dataLoader(): loads, filters, and transforms the metabolite data and the microbial data and each week
-
-
-class metabLoader():
-    # Class loads, filters, and transforms the metabolite data from the CDI study
-    # TO DO: to use with pytorch 3.6 (i.e. the latest version that can be used with ete3), need to save and load .xlsx file as .csv
-    # Inputs:
-    # - path: path to cdi data
-    # - filename: filename of CDI data
-    # - non_zero_perc: For filtering, keep metabolites that are non-zero within <non_zero_perc> percentage of participants
-    #       (i.e. non_zero_perc = 95 means only metabolites not zero in 95 participants are kept, all others are filtered out)
-    # - meas_thresh: threshold below which to count as 'zero' (or the measurement threshold)
-    # - var_perc: For filtering, keep metabolites that have coefficients of variation in the top <var_perc> percentile
-    # - week: Week of data to use
-    def __init__(self, path = "/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/cdi/",
-                 filename = "CDiffMetabolomics.xlsx", non_zero_perc = 95, meas_thresh = 0,
-                 var_perc = 5, week = 1):
-        self.path = path
-        self.non_zero_perc = non_zero_perc
-        self.var_perc = var_perc
-        self.filename = filename
-        self.meas_thresh = meas_thresh
-        self.week = week
-        self.load_cdiff_data()
-
-        value = self.cdiff_data_dict
-        value['data'] = value['data'].fillna(0)
-        value['targets'] = value['targets'].replace('Recur', 'Recurrer').replace('Cleared', 'Non-recurrer')
-        value['targets_by_pt'] = value['targets_by_pt'].replace('Recur', 'Recurrer').replace('Cleared', 'Non-recurrer')
-
-
-        temp = self.get_week_x_step_ahead(value['data'], value['targets_by_pt'], week=week)
-        filt1, tr, filt2, x = self.filter_transform(temp['x'], targets_by_pt=None, filter=True, weeks=[week])
-        self.data = {'x': x, 'y': temp['y']}
-        self.filt1 = filt1
-        self.tr = tr
-        self.filt2 = filt2
-
-        x = temp['x'][self.data['x'].columns.values]
-        self.data_ntr_filt = {'x': x, 'y': temp['y']}
-
-        self.data_ntr_nfilt = {'x': temp['x'], 'y': temp['y']}
-        filt2, tr, filt2, x = self.filter_transform(temp['x'], targets_by_pt=None, filter = False, weeks = [week])
-        self.data_tr_nfilt = {'x': x, 'y': temp['y']}
-
-
-    def load_cdiff_data(self):
-        xl = pd.ExcelFile(self.path + '/' + self.filename)
-        self.cdiff_raw = xl.parse('OrigScale', header = None, index_col = None)
-        ixs = np.where(self.cdiff_raw == 'MASS EXTRACTED')
-        ix_row, ix_col = ixs[0].item(), ixs[1].item()
-        act_data = self.cdiff_raw.iloc[ix_row + 2:, ix_col + 1:]
-        feature_header = self.cdiff_raw.iloc[ix_row+2:, :ix_col+1]
-        pt_header = self.cdiff_raw.iloc[:ix_row + 1, ix_col + 1:]
-        pt_names = list(self.cdiff_raw.iloc[:ix_row+1, ix_col])
-        feat_names = list(self.cdiff_raw.iloc[ix_row+1, :ix_col + 1])
-        feat_names[-1] = 'HMDB'
-
-        self.col_mat_mets = feature_header
-        self.col_mat_mets.columns = feat_names
-        self.col_mat_mets.index = np.arange(self.col_mat_mets.shape[0])
-        #
-        self.col_mat_pts = pt_header.T
-        self.col_mat_pts.columns = pt_names
-        self.col_mat_pts.index = np.arange(self.col_mat_pts.shape[0])
-
-        self.targets_dict = pd.Series(self.col_mat_pts['PATIENT STATUS (BWH)'].values, index = self.col_mat_pts['CLIENT SAMPLE ID'].values).to_dict()
-
-        self.cdiff_dat = pd.DataFrame(np.array(act_data), columns = self.col_mat_pts['CLIENT SAMPLE ID'].values,
-                          index = self.col_mat_mets['BIOCHEMICAL'].values).fillna(0).T
-
-        self.targets_by_pt = {key.split('-')[0]:value for key, value in self.targets_dict.items() if key.split('-')[1].isnumeric()}
-        self.cdiff_data_dict = {'sampleMetadata':self.col_mat_pts, 'featureMetadata':self.col_mat_mets,
-                                'data':self.cdiff_dat, 'targets':pd.Series(self.targets_dict),
-                                'targets_by_pt': pd.Series(self.targets_by_pt)}
-        self.col_mat_mets = self.col_mat_mets.set_index('BIOCHEMICAL')
-
-    def get_week_x_step_ahead(self, data, targets, week = 1):
-
-        ixs = data.index.values
-        pts = [x.split('-')[0] for x in ixs]
-        tmpts = [x.split('-')[1] for x in ixs]
-        week_one = np.where(np.array(tmpts) == str(week))[0]
-        pt_keys = np.array(pts)[week_one]
-
-        rm_ix = []
-        targets_out = {}
-        event_time = {}
-        for pt in np.unique(pts):
-            targets_out[pt] = 'Non-recurrer'
-            ix_pt = np.where(pt == np.array(pts))[0]
-            tm_floats = [float(tmpts[ix]) for ix in ix_pt if tmpts[ix].replace('.', '').isnumeric()]
-            event_time[pt] = tm_floats[-1]
-            if targets[pt] == 'Recurrer':
-                ix_pt = np.where(pt == np.array(pts))[0]
-                tm_floats = [float(tmpts[ix]) for ix in ix_pt if tmpts[ix].replace('.','').isnumeric()]
-                if week not in tm_floats:
-                    continue
-                if max(tm_floats) == week:
-                    rm_ix.append(pt)
-                    continue
-                tm_floats.sort()
-                tmpt_step_before = tm_floats[-2]
-                if tmpt_step_before == week:
-                    targets_out[pt] = 'Recurrer'
-
-        pt_keys = np.array(list(set(pt_keys) - set(rm_ix)))
-        pt_keys_1 = np.array([pt + '-' + str(week) for pt in pt_keys])
-        data_w1 = data.loc[pt_keys_1]
-        targs = pd.Series(targets_out)[pt_keys]
-        return {'x':data_w1,'y_step_ahead':targs, 'y':targets[pt_keys], 'event_times': pd.Series(event_time)[pt_keys]}
-
-    def filter_transform(self, data, targets_by_pt, filter = True, weeks = [0,1,2]):
-        if filter:
-            filt1 = filter_by_pt(data, perc=self.non_zero_perc/100, pt_thresh=1,
-                                 meas_thresh=self.meas_thresh, weeks = weeks)
-            # print(key + ', 1st filter: ' + str(filt1.shape))
-        else:
-            filt1 = data
-
-        epsilon = get_epsilon(filt1)
-        transformed = np.log(filt1 + epsilon)
-
-        if filter:
-            filt2 = filter_vars(transformed, perc=self.var_perc)
-        else:
-            filt2 = transformed
-
-        stand, mean, dem = standardize(filt2, override=True)
-        return filt1, transformed, filt2, stand
-
+# This script loads, filters, and transforms the CDI data
 
 class dataLoader():
     # Class loads, filters, and transforms the metabolite & 16s data from the CDI study
@@ -154,8 +19,8 @@ class dataLoader():
     # - var_perc: For filtering, keep metabolites that have coefficients of variation in the top <var_perc> percentile
     # - pt_tmpts: Whether to filter using just one timepoint or multiple
     def __init__(self, path = "/Users/jendawk/Dropbox (MIT)/Microbes to Metabolomes/Datasets/cdi/",
-                 filename_cdiff = "CDiffMetabolomics.xlsx",
-        filename_16s = 'seqtab-nochim-total.xlsx',
+                 filename_cdiff = "CDiffMetabolomics.xls",
+        filename_16s = 'seqtab-nochim-total.xls',
                  pt_perc = {'metabs': .25, '16s': .1},
                  meas_thresh = {'metabs': 0, '16s': 10},
                  var_perc={'metabs': 50, '16s': 5}, pt_tmpts = 1):

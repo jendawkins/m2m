@@ -1,4 +1,4 @@
-#!/Users/jendawk/miniconda3/envs/my-rdkit-env/bin python3
+# #!/Users/jendawk/miniconda3/envs/my-rdkit-env/bin python3
 
 import numpy as np
 import pandas as pd
@@ -158,7 +158,6 @@ if __name__ == "__main__":
     # fingerprint method and distance metric
     # TO DO:
     # - atom_paris and the morgan fingerprints don't seem to work yet; can figure out how to get them to work
-    base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
     parser = argparse.ArgumentParser()
     parser.add_argument("-fingerprint", "--fingerprint",
                         help = "fingerprint method; choices are: 'pubchem', 'RDK' or 'MACCS' ",
@@ -170,27 +169,30 @@ if __name__ == "__main__":
     parser.add_argument("-smiles_type", "--smiles_type", help='smiles type; keep as isomeric', type=str, default='isomeric')
     parser.add_argument("-yfile", "--yfile", type = str,
                         help = 'filename for processed metabolomic data, distance matrix calculated for metabolites in yfile')
+    parser.add_argument("-ydist_file", "--ydist_file", type = str,
+                        help = 'filename to save dist file to ')
     parser.add_argument("-o", "--outpath", type=str, help = 'path to save distance matrix to')
+    parser.add_argument("-b", "--base_path", type= str, help = "base path")
     args = parser.parse_args()
 
-    sm = pd.read_csv(base_path + 'inputs/processed/' + args.yfile)
+    sm = pd.read_csv(args.base_path + '/inputs/processed/' + args.yfile)
     mets_keep = sm.columns.values
 
-    if not os.path.isdir(base_path + '/inputs/processed/' + args.fingerprint):
-        os.mkdir(base_path + '/inputs/processed/' + args.fingerprint)
+    if not os.path.isdir(args.base_path + '/inputs/processed/' + args.fingerprint):
+        os.mkdir(args.base_path + '/inputs/processed/' + args.fingerprint)
 
-    if os.path.isfile(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl'):
-        with open(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'rb') as f:
+    if os.path.isfile(args.base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl'):
+        with open(args.base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'rb') as f:
             met_to_fingerprint = pkl.load(f)
-        with open(base_path + '/inputs/processed/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
+        with open(args.base_path + '/inputs/processed/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
             met_to_smiles = pkl.load(f)
 
 
     else:
-        with open(base_path + '/inputs/processed/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
+        with open(args.base_path + '/inputs/processed/' + 'met_to_' + args.smiles_type + '_smiles.pkl', 'rb') as f:
             met_to_smiles = pkl.load(f)
         if args.fingerprint == 'pubchem':
-            with open(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint.pkl', 'rb') as f:
+            with open(args.base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint.pkl', 'rb') as f:
                 init_met_to_fingerprint = pkl.load(f)
             met_to_fingerprint = {met: init_met_to_fingerprint[met] for met in mets_keep if met in init_met_to_fingerprint.keys()}
         else:
@@ -210,7 +212,7 @@ if __name__ == "__main__":
                 if args.fingerprint == 'morgan_FCFP4':
                     met_to_fingerprint[met] = AllChem.GetMorganFingerprint(m,2, useFeatures = True)
 
-        with open(base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'wb') as f:
+        with open(args.base_path + '/inputs/processed/' + args.fingerprint + '/met_to_fingerprint_sm.pkl', 'wb') as f:
             pkl.dump(met_to_fingerprint, f)
 
     if args.fingerprint != 'pubchem':
@@ -230,12 +232,13 @@ if __name__ == "__main__":
         if args.metric == 'cosine':
             fingerprint_metric = cosine
 
-    if not os.path.isfile(base_path + '/inputs/processed/' + args.fingerprint + '/' + args.metric + '-dist_sm.csv'):
+    if not os.path.isfile(args.base_path + '/inputs/processed/' + args.ydist_file):
         dist_dict = get_distances(met_to_fingerprint, args.fingerprint, fingerprint_metric, args.metric)
         df = pd.DataFrame(dist_dict)
-        df.to_csv(args.o + args.fingerprint + '/' + args.metric + '-dist_sm.csv')
+        df = df[mets_keep].loc[mets_keep]
+        df.to_csv(args.outpath + args.ydist_file)
     else:
-        df = pd.read_csv(args.o + args.fingerprint + '/' + args.metric + '-dist_sm.csv', header=0, index_col=0)
+        df = pd.read_csv(args.outpath  + args.ydist_file, header=0, index_col=0)
 
 
 

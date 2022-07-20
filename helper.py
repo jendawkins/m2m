@@ -339,7 +339,7 @@ def get_meas_var(raw_data, repeat_data):
     return pooled_var
 
 
-def load_data(base_path, xfile, yfile, dataLoader):
+def load_data(xfile, yfile, dataLoader,data_path, out_path):
     """
     Load data based on filtering critera specefied in yfile filename, called in main.py
         Inputs:
@@ -353,12 +353,15 @@ def load_data(base_path, xfile, yfile, dataLoader):
 
         Saves xfile and yfile to <base_path>/inputs/processed/ under the filenames xfile and yfile
     """
-    data_path = base_path + "/inputs"
-    pt_perc = float('0.' + yfile.split('-')[1])
-    var_perc = float(yfile.split('-')[-1].split('.')[0])
-    dl = dataLoader(path=data_path, pt_perc={'metabs': pt_perc, '16s': .1, 'scfa': 0, 'toxin': 0}, meas_thresh=
-    {'metabs': 0, '16s': 10, 'scfa': 0, 'toxin': 0},
-                    var_perc={'metabs': var_perc, '16s': 5, 'scfa': 0, 'toxin': 0}, pt_tmpts=1)
+    # data_path = base_path + "/inputs"
+    pt_perc = float('0.' + yfile.split('_')[1])
+    var_perc = float(yfile.split('_')[-1].split('.')[0])
+
+    pt_perc_bug = float('0.' + xfile.split('_')[1])
+    var_perc_bug = float(xfile.split('_')[-1].split('.')[0])
+    dl = dataLoader(path=data_path, pt_perc={'metabs': pt_perc, '16s': pt_perc_bug}, meas_thresh=
+    {'metabs': 0, '16s': 10},
+                    var_perc={'metabs': var_perc, '16s': var_perc_bug}, pt_tmpts=1)
 
     x = dl.week_sm_filt['16s'][1]['x']
     x = np.divide(x.T, np.sum(x, 1)).T
@@ -375,20 +378,20 @@ def load_data(base_path, xfile, yfile, dataLoader):
     unique_ixs = np.unique(rep_pts)
     rep_list = [repeat_dat.loc[[ix for ix in replicate_ixs if ix.split('-')[0] == unique_ix]] for unique_ix in unique_ixs]
     pooled_var = get_meas_var(y_raw, rep_list)
-    with open(data_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'wb') as f:
+    with open(out_path + '/' + yfile.split('.')[0] + '-mvar.pkl', 'wb') as f:
         pkl.dump(pooled_var, f)
 
-    met_classes = pd.read_csv(data_path + '/classy-fire/classy_fire_df.csv', header = 0, index_col = 0)
+    met_classes = pd.read_csv(data_path + '/classy_fire_df.csv', header = 0, index_col = 0)
     inter = set(met_classes.columns.values).intersection(y.columns.values)
     y = y[inter]
     y = y.loc[x.index.values]
     # y.drop('linolenoyl-linolenoyl-glycerol (18:3/18:3) [2]*', axis = 1)
-    if not os.path.isdir(data_path + '/' + 'processed/'):
-        os.mkdir(data_path + '/' + 'processed/')
-    x.to_csv(data_path + '/' + 'processed/' + xfile)
-    y.to_csv(data_path + '/' + 'processed/' + yfile)
+    if not os.path.isdir(out_path):
+        os.mkdir(out_path)
+    x.to_csv(out_path + xfile)
+    y.to_csv(out_path + yfile)
 
-def make_tree(feats, base_path, case, func='asv',
+def make_tree(feats, base_path, case, func='asv',data_path = '',
               newick_path='/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
               dist_type = ''):
     """
@@ -421,13 +424,13 @@ def make_tree(feats, base_path, case, func='asv',
 
     if func == 'metab_orig':
         input_ls = ["python3", "tree_plotter.py", "-fun", func, "-name", case + '/' + func + '_in.pdf', "-newick",
-             base_path + newick_path, "-dtype", dist_type, "-feat"]
+             base_path + newick_path, "-dtype", dist_type,"-data_path", data_path ,"-feat"]
         input_ls.extend(feats)
         subprocess.run(input_ls,
             cwd=base_path + "/ete_tree")
     else:
         input_ls = ["python3", "tree_plotter.py", "-fun", func, "-name", case + '/' + func + '_in.pdf', "-newick",
-             base_path + newick_path, "-feat"]
+             base_path + newick_path, "-data_path", data_path, "-feat"]
         input_ls.extend(feats)
         subprocess.run(input_ls,
             cwd=base_path + "/ete_tree")
