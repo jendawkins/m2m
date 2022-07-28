@@ -6,9 +6,10 @@ import itertools
 import time
 import numpy as np
 import datetime
+import os
 
 # max_load = 4
-base_path = '/Users/jendawk/Dropbox (MIT)/M2M/'
+base_path = os.getcwd()
 parser = argparse.ArgumentParser()
 parser.add_argument("-case", "--case", help="case", type=str,
                     default=datetime.date.today().strftime('%m %d %Y').replace(' ', '-'))
@@ -17,20 +18,19 @@ args = parser.parse_args()
 
 max_load = args.max_load
 
-param_dict = {('L', 'K'): [(30,30), (20,20)], 'seed': [0,1,2],
+param_dict = {('L', 'K'): [(3,3)], 'seed': [0,1,2],
               ('learn','priors'): [('all', 'all')],
               #'fix': ['sigma',''],
               'iter': 30000,
-              'w_tau': [(-0.3, -3)],
+              'w_tau': [(-0.001, -1)],
               'a_tau': [(-0.3, -3)], 'gmm': [0],
-              'lr': [0.1,0.01, 0.001], 'meas_var': 0.10,
-              'nzm': 85, 'nzb': 15, 'cvm': 5, 'cvb': 0,
-              'data': 'safari',
-              'load': 0, 'linear': 1,
+              'lr': [0.1], 'meas_var': 0.10, 'l1': [0,1],
+             # 'nzm': 85, 'nzb': 15, 'cvm': 5, 'cvb': 0,
+              'data': 'synthetic',
+              'load': 0, 'linear': 0, 'nltype': ['sine', 'sigmoid', 'linear', 'poly', 'exp'],
               'hard': [0],
               'lm': [0], 'lb': [0], 'adjust_lr': [1],
-              'locs': ['none'],
-              'safari': 1, 'most_corr': [0,1], 'saf_type': ['polar', 'lipids-pos', 'lipids-neg'],
+              'locs': ['true'],
               'case': args.case
               }
 

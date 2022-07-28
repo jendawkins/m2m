@@ -121,6 +121,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
         g[:,i] = st.uniform(cluster_starts[i], cluster_ends[i]-cluster_starts[i]).rvs(size = N_samples)
         outer_ixs = np.where(temp2[:,i]==1)[0]
         conc = np.repeat(g[:, i:i+1], len(outer_ixs), axis = 1) / len(outer_ixs)
+        # conc = np.repeat(1, len(outer_ixs), axis=1) / len(outer_ixs)
         p = [st.dirichlet(conc[n,:]).rvs() for n in range(conc.shape[0])]
         X[:, outer_ixs] = np.stack([st.multinomial(int(np.round(g[n,i])), p[n].squeeze()).rvs() for n in range(len(p))]).squeeze()
 

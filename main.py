@@ -109,7 +109,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             '-'*(1-args.linear) +args.nltype*(1-args.linear)*(args.data=='synthetic') + '-lm'*args.lm + '-lb'*args.lb + \
             '-meas_var' + str(np.round(args.meas_var,3)).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
            '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
-           '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_')
+           '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_') + '-l1'*args.l1
 
     path = path + '/' + info + '/'
     if not os.path.isdir(path):
@@ -170,7 +170,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         true_vals = None
 
     # Define model and initialize with input seed
-    net = Model(a_met, a_bug, K=args.K, L=args.L,
+    net = Model(a_met, a_bug, K=args.K, L=args.L, l1 = args.l1,
                 compute_loss_for=priors2set, N_met = y.shape[1], N_bug = x.shape[1],
                 learn_num_bug_clusters=args.lb,learn_num_met_clusters=args.lm, linear = args.linear==1,
                 p_nn = args.p_num, data_meas_var = args.meas_var, met_class = met_class, bug_class = bug_class,
@@ -581,6 +581,7 @@ if __name__ == "__main__":
     parser.add_argument("-p_num", "--p_num", type=int, default=1,
                         help = "if non-linear, how many neural networks per microbe cluster - metabolite cluster interaction"
                                "(i.e. p=1 means 1 NN per each interaction)")
+    parser.add_argument("-l1", "--l1", type = int, default = 0, help = "if non-linear, whether to regularize or not")
 
     parser.add_argument("-xdim", "--xdim", type=int, default=2, help = 'embedding dimension for microbes')
     parser.add_argument("-ydim", "--ydim", type=int, default=2, help = 'embedding dimension for metabolites')

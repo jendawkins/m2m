@@ -15,7 +15,7 @@ class Model(nn.Module):
                  alpha_temp = 1, omega_temp = 1, data_meas_var = 1,
                  compute_loss_for = ['alpha','beta','w','z','mu_bug','r_bug','pi_bug','mu_met','r_met','pi_met'],
                  learn_num_met_clusters = False, learn_num_bug_clusters = False, linear = True,
-                p_nn = 1, sample_a = True, sample_w = True, met_class = None, bug_class = None, gmm = 0):
+                p_nn = 1, sample_a = True, sample_w = True, met_class = None, bug_class = None, gmm = 0, l1 = None):
         super(Model, self).__init__()
         # This function initializes the Model and calls the loss class
 
@@ -106,6 +106,8 @@ class Model(nn.Module):
         # Measurment variance of data
         self.data_meas_var = data_meas_var
 
+        self.l1 = l1
+
         # If we learn the number of microbe/metabolite clusters and met_class is not None and bug_class is not None,
         # set the number of metabolomic clusters to the number of unique metabolite classes and the number of microbes
         # to the number of unique microbial classes
@@ -128,13 +130,13 @@ class Model(nn.Module):
         # 2 hidden layers with 32 nodes in the first layer and 16 nodes in the second layer
         if not self.linear:
             self.NAM = nn.ModuleList([nn.ModuleList([nn.ModuleList([nn.Sequential(
-                nn.Linear(1, 16, bias = True),
+                nn.Linear(1, 8, bias = True),
                 nn.ReLU(),
-                nn.Linear(16, 16, bias = True),
+                nn.Linear(8, 8, bias = True),
                 nn.ReLU(),
-                nn.Linear(16, 8, bias = True),
+                nn.Linear(8, 6, bias = True),
                 nn.ReLU(),
-                nn.Linear(8,1, bias = True)
+                nn.Linear(6,1, bias = True)
             ) for p in np.arange(self.p_nn)]) for l in np.arange(self.L)]) for k in np.arange(self.K)])
 
 
@@ -169,9 +171,13 @@ class Model(nn.Module):
             # We re-parameterize to be able to use a Gamma dist since pytorch doesn't have an inv-gamma or inv-chi-squared
             v = 0.1
             tau2 = loc
-            self.params['r_met'] = {'loc': loc, 'scale': (tau2*v)/2, 'dof': v/2}
-            self.distributions['r_met'] = Gamma(rate=self.params['r_met']['scale'],
-                                                      concentration=self.params['r_met']['dof'])
+            # self.params['r_met'] = {'loc': loc, 'scale': (tau2*v)/2, 'dof': v/2}
+            # self.distributions['r_met'] = Gamma(rate=self.params['r_met']['scale'],
+            #                                           concentration=self.params['r_met']['dof'])
+
+            self.params['r_met'] = {'scale': 10, 'loc': loc}
+            self.distributions['r_met'] = HalfNormal(10)
+
             # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
             # locations are already scaled to have variance 1)
             self.params['mu_met'] = {'mean': 0, 'var': 100}
@@ -199,9 +205,11 @@ class Model(nn.Module):
                 loc = scale / self.L
             v = 0.1
             tau2 = loc
-            self.params['r_bug'] = {'scale': (tau2*v)/2, 'dof': v/2}
-            self.distributions['r_bug'] = Gamma(rate=self.params['r_bug']['scale'],
-                                                      concentration=self.params['r_bug']['dof'])
+            # self.params['r_bug'] = {'scale': (tau2*v)/2, 'dof': v/2}
+            self.params['r_bug'] = {'scale': 10, 'loc': loc}
+            self.distributions['r_bug'] = HalfNormal(10)
+            # self.distributions['r_bug'] = Gamma(rate=self.params['r_bug']['scale'],
+            #                                           concentration=self.params['r_bug']['dof'])
             self.params['mu_bug'] = {'mean': 0, 'var': 100}
             self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim), (self.params['mu_bug']['var'])*torch.eye(self.bug_embedding_dim))
 
@@ -254,7 +262,8 @@ class Model(nn.Module):
             # pytorch only has a Gamma distribution. To get the expected size of the un-constrained and learned parameter,
             # we sample from the Gamma dist but then take the log of the inverse
             if 'r_met' in param or 'r_bug' in param:
-                vals = np.log(1/self.distributions[param].sample([1000]))
+                # vals = np.log(1/self.distributions[param].sample([1000]))
+                vals = np.log(self.distributions[param].sample([1000]))
                 self.lr_range[param] = torch.abs((torch.mean(vals) + torch.std(vals)) - (torch.mean(vals) - torch.std(vals)))
             elif 'w' in param or 'z' in param or 'alpha' in param:
                 self.lr_range[param] = np.abs(2*(torch.log(torch.tensor(self.params[param]['loc']).float())/self.params[param]['temp']))
@@ -302,7 +311,7 @@ class Model(nn.Module):
                                                      kmeans.cluster_centers_[clust:clust+1,:])
                 r.append(np.max(cdist.squeeze()))
             eps = 0.01*np.max(r)
-            self.r_bug = nn.Parameter(torch.Tensor(1.5*np.array(r + eps)), requires_grad=True)
+            self.r_bug = nn.Parameter(torch.Tensor(1.1*np.array(r + eps)), requires_grad=True)
             # self.mu_bug = nn.Parameter(MultivariateNormal(torch.zeros(self.bug_embedding_dim), 0.1*torch.eye(self.bug_embedding_dim)).sample([self.L]), requires_grad=True)
             # temp = np.sqrt(np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2)) / 2
             # self.r_bug = nn.Parameter(torch.log(1.2*temp*torch.ones(self.L)), requires_grad=True)
@@ -323,21 +332,20 @@ class Model(nn.Module):
         self.w_loc = 0.1
         # Initialize the metabolite cluster means and radii
         if self.met_locs is not None:
-            if self.met_class is not None:
-                kmeans = KMeans(n_clusters=self.K, random_state=self.seed).fit(self.met_locs)
-                self.mu_met = nn.Parameter(torch.Tensor(kmeans.cluster_centers_), requires_grad=True)
-                r = []
-                for clust in np.arange(self.K):
-                    cdist = scipy.spatial.distance.cdist(self.met_locs[kmeans.labels_ == clust, :],
-                                                         kmeans.cluster_centers_[clust:clust + 1, :])
-                    r.append(np.max(cdist.squeeze()))
-                eps = 0.01 * np.max(r)
-                self.r_met = nn.Parameter(torch.Tensor(1.5 * np.array(r + eps)), requires_grad=True)
-            else:
-                ix = np.random.choice(range(self.met_locs.shape[0]), self.L, replace=False)
-                self.mu_met = nn.Parameter(torch.Tensor(self.met_locs[ix, :]), requires_grad=True)
-                r_temp = self.params['r_met']['loc'] * torch.ones((self.L)).squeeze()
-                self.r_met = nn.Parameter(torch.log(r_temp), requires_grad=True)
+            kmeans = KMeans(n_clusters=self.K, random_state=self.seed).fit(self.met_locs)
+            self.mu_met = nn.Parameter(torch.Tensor(kmeans.cluster_centers_), requires_grad=True)
+            r = []
+            for clust in np.arange(self.K):
+                cdist = scipy.spatial.distance.cdist(self.met_locs[kmeans.labels_ == clust, :],
+                                                     kmeans.cluster_centers_[clust:clust + 1, :])
+                r.append(np.max(cdist.squeeze()))
+            eps = 0.01 * np.max(r)
+            self.r_met = nn.Parameter(torch.Tensor(1.1 * np.array(r + eps)), requires_grad=True)
+        else:
+            ix = np.random.choice(range(self.met_locs.shape[0]), self.L, replace=False)
+            self.mu_met = nn.Parameter(torch.Tensor(self.met_locs[ix, :]), requires_grad=True)
+            r_temp = 0.5 * torch.ones((self.L)).squeeze()
+            self.r_met = nn.Parameter(torch.log(r_temp), requires_grad=True)
 
         # initialize cluster weights
         pi_init = (1 / self.K) * torch.ones(self.K)
@@ -395,4 +403,11 @@ class Model(nn.Module):
                 0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
         # compute loss via the priors
         loss = self.MAPloss.compute_loss(out_clusters,y)
+        if self.l1 and not self.linear:
+            l1_parameters = []
+            for parameter in self.NAM.parameters():
+                l1_parameters.append(parameter.view(-1))
+            l1 = self.compute_l1_loss(torch.cat(l1_parameters))
+            loss += l1
+
         return out_clusters, loss

@@ -125,8 +125,9 @@ class MAPloss():
         # We also have to take the inverse of the transformed net.r_bug since we paramterize net.r_bug as inverse gamma,
         # but torch only has a gamma distribution
         gamma = self.net.distributions['r_bug']
-        val = 1 / (torch.exp(self.net.r_bug))
-        val = torch.clamp(val, min=1e-10)
+        # val = 1 / (torch.exp(self.net.r_bug))
+        val = torch.exp(self.net.r_bug)
+        # val = torch.clamp(val, min=1e-10)
         self.loss_dict['r_bug'] = -gamma.log_prob(val).sum()
 
     def mu_met_loss(self):
@@ -136,7 +137,8 @@ class MAPloss():
 
     def r_met_loss(self):
         # Computes loss for r_met, same as loss for r_bug
-        val = 1 / (torch.exp(self.net.r_met))
+        # val = 1 / (torch.exp(self.net.r_met))
+        val = torch.exp(self.net.r_met)
         gamma = self.net.distributions['r_met']
         self.loss_dict['r_met'] = -gamma.log_prob(val).sum()
 
