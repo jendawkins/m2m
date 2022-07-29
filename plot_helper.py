@@ -16,6 +16,7 @@ from matplotlib.pyplot import cm
 from collections import Counter
 # from skbio.stats.ordination import pcoa
 # from skbio.stats.distance import DistanceMatrix
+import scipy
 
 def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
                   mu_bug, r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta):
@@ -220,7 +221,7 @@ def plot_distribution(dist, param, true_val = None, ptype = 'init', path = '', *
             tv = true_val.flatten()
         for k in np.arange(len(tv)):
             if k == 0:
-                ax.axvline(tv[k], c = 'r', label = label)
+                ax.axvline(tv[k], c = 'r', label = 'True value')
             else:
                 ax.axvline(tv[k], c='r')
             ax.legend(loc = 'upper right')
@@ -237,11 +238,16 @@ def plot_posterior(param_dict, seed, out_path):
     (i.e. if iterations = 12,000, plot histogram of parameter values from epoch = 9,000 to epoch = 12,000)
     Plots saved in out_path + '/posteriors/'
     """
-    for key in param_dict[seed].keys():
-        print(key)
-        start = len(param_dict[seed][key])
+    for key in param_dict.keys():
+        start = len(param_dict[key])
         fig, ax = plt.subplots()
-        all_dat = param_dict[seed][key]
+
+        all_dat = param_dict[key]
+        if 'r_' in key or 'e_met' in key:
+            all_dat = [np.exp(xx) for xx in all_dat]
+        elif 'pi_met' in key:
+            all_dat = [scipy.special.softmax(xx, 1) for xx in all_dat]
+
         try:
             all_dat1 = np.concatenate(all_dat)
             all_dat1 = all_dat1
@@ -250,24 +256,23 @@ def plot_posterior(param_dict, seed, out_path):
 
         range = (np.array(all_dat1).flatten().min(), np.array(all_dat1).flatten().max())
 
-        iterset = np.int(len(param_dict[seed][key])/4)
-        posterior_list = param_dict[seed][key][start - iterset: start]
+        iterset = np.int(len(param_dict[key])/4)
+        posterior_list = all_dat[start - iterset: start]
 
         try:
             dat = np.concatenate(posterior_list)
             dat = dat.flatten()
         except:
             dat = posterior_list
-        # dat = dat.detach().numpy().flatten()
 
         ax.hist(dat, range = range, bins=20, label='Iterations ' + str(start - iterset) + ' to ' + str(start), alpha=0.5)
         ax.legend()
-        ax.set_title(key + ', ' + str(len(param_dict[seed][key])) + ' iterations')
+        ax.set_title(key + ', ' + str(len(param_dict[key])) + ' iterations')
         if not os.path.isdir(out_path + '/posteriors'):
             os.mkdir(out_path + '/posteriors')
         fig.savefig(out_path + '/posteriors/' + str(seed) + '-' + key + '-posterior_dist.pdf')
 
-def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
+def plot_param_traces(path, param_dict, true_vals, fold):
     """
     Plot parameter traces over the course of learning
     Inputs: path = path to save; param_dict = parameter dictionary; params2learn = whichever parameters the model is learning;
@@ -277,84 +282,84 @@ def plot_param_traces(path, param_dict, params2learn, true_vals, net, fold):
     """
     fig_dict, ax_dict = {},{}
     for name, plist in param_dict.items():
-        if name in params2learn or 'all' in params2learn or name == 'z' or 'w_' in name:
-            if len(plist[0].shape) == 0:
-                n = 1
-            else:
-                n = plist[0].squeeze().shape[0]
-                if n > 5:
-                    n = 5
-            if len(plist[0].squeeze().shape)<=1:
-                fig_dict[name], ax_dict[name] = plt.subplots(n,
-                                                             figsize=(5, 4 * n))
-            else:
-                nn = plist[0].squeeze().shape[1]
-                if nn > 5:
-                    nn = 5
-                fig_dict[name], ax_dict[name] = plt.subplots(n, nn,
-                                                             figsize = (5*nn, 4*n))
-            try:
-                dat = np.concatenate([p.flatten() for p in plist])
-            except:
-                dat = plist
-            mindat = np.min(dat)
-            maxdat = np.max(dat)
+        if len(plist[0].shape) == 0:
+            n = 1
+        else:
+            n = plist[0].squeeze().shape[0]
+            if n > 5:
+                n = 5
+        if len(plist[0].squeeze().shape)<=1:
+            fig_dict[name], ax_dict[name] = plt.subplots(n,
+                                                         figsize=(5, 4 * n))
+        else:
+            nn = plist[0].squeeze().shape[1]
+            if nn > 5:
+                nn = 5
+            fig_dict[name], ax_dict[name] = plt.subplots(n, nn,
+                                                         figsize = (5*nn, 4*n))
+        try:
+            dat = np.concatenate([p.flatten() for p in plist])
+        except:
+            dat = plist
 
-            for k in range(n):
-                if len(plist[0].squeeze().shape) <= 1:
-                    if name == 'sigma' or name == 'p':
-                        trace = plist
-                        ax_dict[name].plot(trace, label='Trace')
-                        if true_vals is not None:
-                            if name in true_vals.keys():
-                                if not hasattr(true_vals[name], '__len__'):
-                                    tv= [true_vals[name]]
-                                else:
-                                    tv = true_vals[name]
-                                ax_dict[name].plot([tv[k]] * len(trace), c='r', label='True')
-                        ax_dict[name].set_title(name + ', ' + str(k))
-                        ax_dict[name].set_ylim([0, maxdat])
-                        ax_dict[name].legend(loc='upper right')
-                        ax_dict[name].set_xlabel('Iterations')
-                        ax_dict[name].set_ylabel('Parameter Values')
-                        ax_dict[name].set_yscale('log')
-                    else:
-                        trace = [p.squeeze()[k] for p in plist]
-                        ax_dict[name][k].plot(trace, label='Trace')
-                        if true_vals is not None:
-                            if name in true_vals.keys():
-                                if not isinstance(true_vals[name], list):
-                                    true_vals[name] = true_vals[name].squeeze()
-                                if np.array(true_vals[name]).shape[0] > k:
-                                    ax_dict[name][k].plot([true_vals[name][k]] * len(trace), c='r', label='True')
-                            ax_dict[name][k].set_title(name + ', ' + str(k))
-                        # if name in net.range_dict.keys():
-                        ax_dict[name][k].set_ylim([mindat, maxdat])
-                        ax_dict[name][k].legend(loc = 'upper right')
-                        ax_dict[name][k].set_xlabel('Iterations')
-                        ax_dict[name][k].set_ylabel('Parameter Values')
+        for k in range(n):
+            if len(plist[0].squeeze().shape) <= 1:
+                if name == 'pi_met':
+                    trace = [scipy.special.softmax(p,1).squeeze()[k] for p in plist]
+                    mindat = -0.05
+                    maxdat = 1.05
+                elif name == 'e_met':
+                    trace = [np.exp(p).squeeze()[k] for p in plist]
+                    mindat = -0.05
+                    maxdat = 1.05
                 else:
-                    for j in range(nn):
-                        new_k, new_j = k, j
-                        trace = [p.squeeze()[new_k, new_j] for p in plist]
-                        if name == 'z' or name == 'w' or name == 'alpha':
-                            trace_ma = [np.sum(trace[i:i + 5:]) / 5 for i in np.arange(len(trace) - 5)]
-                            trace_ma[:0] = [trace_ma[0]]*(len(trace)-len(trace_ma))
-                            trace = trace_ma
-                        ax_dict[name][k, j].plot(trace, label='Trace')
-                        if true_vals is not None:
-                            if name in true_vals.keys():
-                                if np.array(true_vals[name]).shape[1]>j and np.array(true_vals[name]).shape[0] > k:
-                                    ax_dict[name][k, j].plot([true_vals[name][k, j]] * len(trace), c='r', label='True')
-                        ax_dict[name][k, j].set_title(name + ', ' + str(k) + ', ' + str(j))
-                        # if name in net.range_dict.keys():
-                        ax_dict[name][k, j].set_ylim([mindat, maxdat])
-                        ax_dict[name][k, j].legend(loc = 'upper right')
-                        ax_dict[name][k, j].set_xlabel('Iterations')
-                        ax_dict[name][k, j].set_ylabel('Parameter Values')
-            fig_dict[name].tight_layout()
-            fig_dict[name].savefig(path + 'seed' + str(fold) + '_' + name + '_parameter_trace.png')
-            plt.close(fig_dict[name])
+                    trace = [p.squeeze()[k] for p in plist]
+                    mindat = np.min(trace) - 0.1*np.mean(np.abs(trace))
+                    maxdat = np.max(trace) + 0.1*np.mean(np.abs(trace))
+                ax_dict[name][k].plot(trace, label='Trace')
+
+                if true_vals is not None:
+                    if name in true_vals.keys():
+                        if not isinstance(true_vals[name], list):
+                            true_vals[name] = true_vals[name].squeeze()
+                        if np.array(true_vals[name]).shape[0] > k:
+                            ax_dict[name][k].plot([true_vals[name][k]] * len(trace), c='r', label='True')
+                    ax_dict[name][k].set_title(name + ', ' + str(k))
+                # if name in net.range_dict.keys():
+                ax_dict[name][k].set_ylim([mindat, maxdat])
+                ax_dict[name][k].legend(loc = 'upper right')
+                ax_dict[name][k].set_xlabel('Iterations')
+                ax_dict[name][k].set_ylabel('Parameter Values')
+            else:
+                for j in range(nn):
+                    new_k, new_j = k, j
+                    if 'r_' in name:
+                        trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
+                    else:
+                        trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
+                    if 'alpha' in name or 'w_act' in name:
+                        mindat = -0.05
+                        maxdat = 1.05
+                    else:
+                        mindat = np.min(trace) - 0.1 * np.mean(np.abs(trace))
+                        maxdat = np.max(trace) + 0.1 * np.mean(np.abs(trace))
+                    ax_dict[name][k, j].plot(trace, label='Trace')
+                    if true_vals is not None:
+                        if name in true_vals.keys():
+                            if np.array(true_vals[name]).shape[1]>j and np.array(true_vals[name]).shape[0] > k:
+                                ax_dict[name][k, j].plot([true_vals[name][k, j]] * len(trace), c='r', label='True')
+                    ax_dict[name][k, j].set_title(name + ', ' + str(k) + ', ' + str(j))
+                    # if name in net.range_dict.keys():
+                    ax_dict[name][k, j].set_ylim([mindat, maxdat])
+                    ax_dict[name][k, j].legend(loc = 'upper right')
+                    ax_dict[name][k, j].set_xlabel('Iterations')
+                    ax_dict[name][k, j].set_ylabel('Parameter Values')
+
+        if not os.path.isdir(path + 'traces/'):
+            os.mkdir(path + 'traces/')
+        fig_dict[name].tight_layout()
+        fig_dict[name].savefig(path + 'traces/seed' + str(fold) + '_' + name + '_parameter_trace.png')
+        plt.close(fig_dict[name])
 
 def plot_locations(path, radii, means, locs, gps, name = 'bug'):
     """
@@ -386,9 +391,8 @@ def plot_output_locations(path, net, best_mod, param_dict, fold, type = 'best', 
     Plot 2D embedded locations and circles indicating cluster, only plot if embedded dimension = 2
     """
     best_w = param_dict['w'][best_mod]
-    # best_w = best_w[:, mapping['bug']]
     best_mu = param_dict['mu_bug'][best_mod]
-    best_r = param_dict['r_bug'][best_mod]
+    best_r = np.exp(param_dict['r_bug'][best_mod])
     best_alpha = param_dict['alpha'][best_mod]
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.scatter(net.microbe_locs[:,0], net.microbe_locs[:,1], facecolors='none',
@@ -413,9 +417,8 @@ def plot_output_locations(path, net, best_mod, param_dict, fold, type = 'best', 
 
     fig, ax = plt.subplots(figsize=(5, 5))
     best_z = param_dict['z'][best_mod]
-    # [:,mapping['met']]
     best_mu = param_dict['mu_met'][best_mod]
-    best_r = param_dict['r_met'][best_mod]
+    best_r = np.exp(param_dict['r_met'][best_mod])
     ax.scatter(net.met_locs[:, 0], net.met_locs[:, 1], facecolors='none',
                edgecolors='k')
     for i in range(param_dict['z'][0].shape[1]):
@@ -441,10 +444,10 @@ def get_interactions_csv(path, best_mod, param_dict, seed):
     """
     Save csv of iteractions between each active cluster
     """
-    best_w = param_dict[seed]['w'][best_mod]
-    best_z = param_dict[seed]['z'][best_mod]
-    best_alpha = param_dict[seed]['alpha'][best_mod]
-    best_alpha_beta = param_dict[seed]['beta[1:,:]*alpha'][best_mod]
+    best_w = param_dict['w'][best_mod]
+    best_z = param_dict['z'][best_mod]
+    best_alpha = param_dict['alpha'][best_mod]
+    best_alpha_beta = param_dict['beta*alpha'][best_mod]
     active_microbes = list(set(np.where(np.sum(best_w,0)>1)[0]).intersection(set(np.where(best_alpha.sum(0)!= 0)[0])))
     active_mets = np.where(np.sum(best_z, 0) > 1)[0]
     df = {}
@@ -460,10 +463,10 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
     Plot interactions between each active cluster
     """
     out = out_vec[best_mod].detach().numpy()
-    best_w = param_dict[seed]['w'][best_mod]
-    best_z = param_dict[seed]['z'][best_mod]
-    best_alpha = param_dict[seed]['alpha'][best_mod]
-    best_beta = param_dict[seed]['beta'][best_mod]
+    best_w = param_dict['w'][best_mod]
+    best_z = param_dict['z'][best_mod]
+    best_alpha = param_dict['alpha'][best_mod]
+    best_beta = param_dict['beta'][best_mod]
 
     # out = out[:, mapping['met']]
     microbe_sum = x.detach().numpy() @ best_w
@@ -519,76 +522,43 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             #     os.mkdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j))
             fig.savefig(path + '/seed' + str(seed)+ '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j) + '-sum_x_v_y.png')
             plt.close(fig)
-
+            jj += 1
             try:
                 fit_df[(j,i)]['beta'] = np.round(best_beta[j+1, i],3)
                 fit_df[(j,i)]['alpha*beta'] = np.round(best_beta[j + 1, i] * best_alpha[j, i], 3)
             except:
                 continue
-            jj+=1
+
         ii+=1
 
-    pd.DataFrame(fit_df).T.to_csv(path + 'seed' + str(seed) + '-fit.csv')
-    df = pd.DataFrame(fit_df).T
-    if not os.path.isfile(path + 'rfit.txt'):
-        with open(path + '-avg-rho.txt', 'w') as f:
-            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
-                    str(np.round(np.std(df['r-squared value']), 3)) + '\n')
-    else:
-        with open(path + '-avg-rho.txt', 'a') as f:
-            f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
-                    str(np.round(np.std(df['r-squared value']), 3)) + '\n')
+    try:
+        pd.DataFrame(fit_df).T.to_csv(path + 'seed' + str(seed) + '-fit.csv')
+        df = pd.DataFrame(fit_df).T
+        if not os.path.isfile(path + 'rfit.txt'):
+            with open(path + 'rfit.txt', 'w') as f:
+                f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
+                        str(np.round(np.std(df['r-squared value']), 3)) + '\n')
+        else:
+            with open(path + 'rfit.txt', 'a') as f:
+                f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
+                        str(np.round(np.std(df['r-squared value']), 3)) + '\n')
+    except:
+        print('')
 
     return x_dict, y_dict
 
-def plot_output(path, best_mod, out_vec, targets, true_vals,
-                param_dict, fold, type = 'unknown', meas_var = 0.1, metabs = None):
+def save_cluster_results(path, best_mod, true_vals,seed,
+                param_dict, metabs = None, seqs = None):
     """
     Function:
-        Plots output metabolic predictions of first 10 subjects
         Saves dataframe of pairwise confusion matrices for metabolite cluster identities and microbe cluster identities
-        Writes files with RI of metabolites and microbes
+        Saves dataframe of cluster IDs
         Writes files with # of active metabolite and microbial clusters
-        Plots error per metabolite
-        Writes file with normalized root-mean squared error for metabolite predictions
-
     """
+    pred_z = param_dict['z'][best_mod]
+    pred_w = param_dict['w'][best_mod]
     if true_vals is not None:
         gen_z = true_vals['z']
-        gen_w = true_vals['w']
-        best_w = param_dict['w'][best_mod]
-        bug_clusters = [np.where(best_w[:,i]>0.5)[0] for i in np.arange(best_w.shape[1])]
-        for ii,clust in enumerate(bug_clusters):
-            if not os.path.isfile(path + 'seed' + str(fold) + 'microbe_clusters.txt'):
-                with open(path + 'seed' + str(fold) + 'microbe_clusters.txt', 'w') as f:
-                    f.writelines('Cluster ' + str(ii) + ': ' + str(clust) + '\n')
-            else:
-                with open(path + 'seed' + str(fold) + 'microbe_clusters.txt', 'a') as f:
-                    f.writelines('Cluster ' + str(ii) + ': ' + str(clust) + '\n')
-
-        tp, fp, tn, fn, ri = pairwise_eval(np.round(best_w), gen_w)
-        pairwise_cf = {'Same cluster': {'Predicted Same cluster': tp, 'Predicted Different cluster': fn},
-                       'Different cluster': {'Predicted Same cluster': fp, 'Predicted Different cluster': tn}}
-        pd.DataFrame(pairwise_cf).T.to_csv(
-            path + 'seed' + str(fold) + '_PairwiseConfusionBugs_' + type + '_' + str(np.round(ri, 3)).replace('.',
-                                                                                                                'd') + '.csv')
-        ri = str(np.round(ri, 3))
-        if not os.path.isfile(path + type +'-ri_bug.txt'):
-            with open(path + type +'-ri_bug.txt', 'w') as f:
-                f.write('Seed ' + str(fold) + ':RI ' + ri + '\n')
-        else:
-            with open(path + type +'-ri_bug.txt', 'a') as f:
-                f.write('Seed ' + str(fold) + ':RI ' + ri + '\n')
-
-    # fig_dict2, ax_dict2 = plt.subplots(targets.shape[1], 1,
-    #                                                figsize=(8, 4 * targets.shape[1]))
-    # fig_dict3, ax_dict3 = plt.subplots(gen_z.shape[1], 1, figsize=(8, 4 * gen_z.shape[1]))
-    pred_clusters = out_vec[best_mod]
-    pred_z = param_dict['z'][best_mod]
-    preds = torch.matmul(pred_clusters + meas_var*torch.randn(pred_clusters.shape), torch.Tensor(pred_z).T)
-    pred_w = param_dict['w'][best_mod]
-    # pred_z = pred_z[:, mapping['met']]
-    if true_vals is not None:
         true = np.argmax(gen_z,1)
         z_guess = np.argmax(pred_z, 1)
         nmi = np.round(normalized_mutual_info_score(true, z_guess), 3)
@@ -597,82 +567,118 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
             pairwise_cf = {'Same cluster': {'Predicted Same cluster': tp, 'Predicted Different cluster': fn},
                            'Different cluster':{'Predicted Same cluster': fp, 'Predicted Different cluster': tn}}
             pd.DataFrame(pairwise_cf).T.to_csv(
-                path + 'seed' + str(fold) + '_PairwiseConfusionMetabs_' + type + '_' + str(np.round(ri,3)).replace('.', 'd') + '.csv')
+                path + 'seed' + str(seed) + '_PairwiseConfusionMetabs_' +  str(np.round(ri,3)).replace('.', 'd') + '.csv')
             ri = str(np.round(ri, 3))
         except:
             ri = 'NA'
-        if not os.path.isfile(path + type +'-nmi_ri.txt'):
-            with open(path + type +'-nmi_ri.txt', 'w') as f:
-                f.write('Seed ' + str(fold) + ': NMI ' + str(nmi) + ', RI ' + ri + '\n')
+        if not os.path.isfile(path + 'nmi_ri.txt'):
+            with open(path + 'nmi_ri.txt', 'w') as f:
+                f.write('Seed ' + str(seed) + ': NMI ' + str(nmi) + ', RI ' + ri + '\n')
         else:
-            with open(path + type +'-nmi_ri.txt', 'a') as f:
-                f.write('Seed ' + str(fold) + ': NMI ' + str(nmi) + ', RI ' + ri + '\n')
+            with open(path + 'nmi_ri.txt', 'a') as f:
+                f.write('Seed ' + str(seed) + ': NMI ' + str(nmi) + ', RI ' + ri + '\n')
 
-    else:
-        with open(path + type + '-metab_clust.txt', 'a') as f:
-            f.write('Seed ' + str(fold) + ': ' + str(np.sum(pred_z, 0)) + '\n')
-        with open(path + type + '-asv_clust.txt', 'a') as f:
-            f.write('Seed ' + str(fold) + ': ' + str(np.sum(pred_w, 0)) + '\n')
-
-    err = np.sum((preds.detach().numpy() - targets)**2,0)/preds.shape[0]
-    std_err = np.std(np.sqrt((preds.detach().numpy() - targets)**2),0)
-    fig, ax = plt.subplots(figsize = (30,6))
-    start = 0
-    minor_ticks = []
-    minor_labels = []
-    major_ticks = []
-    major_labels = []
+    cluster_df = {}
     for cluster in range(pred_z.shape[1]):
-        met_ids = np.where(pred_z[:, cluster]==1)[0]
-        if len(met_ids) > 0:
-            clust_err = err[met_ids]
-            clust_std = std_err[met_ids]
-            if metabs is not None:
-                clust_mets = metabs[met_ids]
-                # print(clust_mets)
-            sort_ix = np.argsort(clust_err)
-            ax.scatter(np.arange(start, len(clust_err)+start), clust_err[sort_ix])
-            ax.errorbar(np.arange(start, len(clust_err)+start), clust_err[sort_ix], yerr = clust_std[sort_ix], fmt = 'o')
-            if metabs is not None:
-                major_ticks.extend(np.arange(start,start + len(clust_err)))
-                major_labels.extend(clust_mets[sort_ix])
-            # print(len(major_ticks))
-            md = start + len(clust_err)/2
-            if int(md) == md:
-                md = md + 0.5
-            # print(md)
-            minor_ticks.append(md)
-            minor_labels.append('Cluster ' + str(cluster))
-            start = start + len(clust_err) + 2
-            # print(start)
+        met_ids = np.where(pred_z[:, cluster] == 1)[0]
+        if len(met_ids) == 0:
+            continue
+        if metabs is not None:
+            cluster_df[cluster] = str(metabs[met_ids])
+        else:
+            cluster_df[cluster] = str(met_ids)
+    pd.Series(cluster_df).to_csv(path + 'seed' + str(seed) + '_metabolite_cluster_ids.csv')
 
-    ax.set_xticks(major_ticks, minor = False)
-    ax.set_xticklabels(major_labels, rotation=45, ha='right', fontsize=6, minor = False)
-    ax.minorticks_on()
-    ax.set_xticks(minor_ticks, minor = True)
-    ax.set_xticklabels(minor_labels, minor = True, fontsize = 30)
-    ax.tick_params(axis='x', which='minor', pad=-30, direction='in')
-    ax.set_ylabel('Error')
-    fig.tight_layout()
-    fig.savefig(path + 'seed' + str(fold) + '-per_met_err.pdf')
-    plt.close(fig)
+    if os.path.isfile(path + 'number_of_met_clusters.txt'):
+        with open(path + 'number_of_met_clusters.txt', 'a') as f:
+            f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(pred_z,0)>0)) + '\n')
+    else:
+        with open(path + 'number_of_met_clusters.txt', 'w') as f:
+            f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(pred_z,0)>0)) + '\n')
 
-    abs_err = np.abs(preds.detach().numpy() - targets)
-    datstd = np.std(np.array(targets).flatten())
-    # perc_corr = len(np.where(abs_err.flatten() < (0.25*datstd))[0])/len(abs_err.flatten())
-    # if not os.path.isfile(path + 'perc-corr.txt'):
-    #     with open(path + 'perc-corr.txt', 'w') as f:
-    #         f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
-    # else:
-    #     with open(path + 'perc-corr.txt', 'a') as f:
-    #         f.write('Seed ' + str(fold) + ': ' + str(np.round(perc_corr*100, 3)) + '% \n')
+    if os.path.isfile(path + 'number_of_bug_clusters.txt'):
+        with open(path + 'number_of_bug_clusters.txt', 'a') as f:
+            f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(np.round(pred_w), 0) > 0)) + '\n')
+    else:
+        with open(path + 'number_of_bug_clusters.txt', 'w') as f:
+            f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(np.round(pred_w), 0) > 0)) + '\n')
+
+
+    cluster_df = {}
+    for cluster in range(pred_w.shape[1]):
+        met_ids = np.where(pred_w[:, cluster] > 0.5)[0]
+        if len(met_ids) == 0:
+            continue
+        if seqs is not None:
+            cluster_df[cluster] = str(seqs[met_ids])
+        else:
+            cluster_df[cluster] = str(met_ids)
+    pd.Series(cluster_df).to_csv(path +  'seed' + str(seed) + 'microbe_cluster_ids.csv')
+
+def plot_output(path, best_mod, out_vec, targets,
+                param_dict, fold, meas_var = 0.1):
+    """
+    Function:
+        Plots output metabolic predictions of first 10 subjects
+        Writes files with # of active metabolite and microbial clusters
+        Plots error per metabolite
+        Writes file with normalized root-mean squared error for metabolite predictions
+
+    """
+
+    pred_clusters = out_vec[best_mod]
+    pred_z = param_dict['z'][best_mod]
+    preds = torch.matmul(pred_clusters + meas_var*torch.randn(pred_clusters.shape), torch.Tensor(pred_z).T)
+    pred_w = param_dict['w'][best_mod]
+
+    # err = np.sum((preds.detach().numpy() - targets)**2,0)/preds.shape[0]
+    # std_err = np.std(np.sqrt((preds.detach().numpy() - targets)**2),0)
+    # fig, ax = plt.subplots(figsize = (30,6))
+    # start = 0
+    # minor_ticks = []
+    # minor_labels = []
+    # major_ticks = []
+    # major_labels = []
+    # for cluster in range(pred_z.shape[1]):
+    #     met_ids = np.where(pred_z[:, cluster]==1)[0]
+    #     if len(met_ids) > 0:
+    #         clust_err = err[met_ids]
+    #         clust_std = std_err[met_ids]
+    #         if metabs is not None:
+    #             clust_mets = metabs[met_ids]
+    #         sort_ix = np.argsort(clust_err)
+    #         ax.scatter(np.arange(start, len(clust_err)+start), clust_err[sort_ix])
+    #         ax.errorbar(np.arange(start, len(clust_err)+start), clust_err[sort_ix], yerr = clust_std[sort_ix], fmt = 'o')
+    #         if metabs is not None:
+    #             major_ticks.extend(np.arange(start,start + len(clust_err)))
+    #             major_labels.extend(clust_mets[sort_ix])
+    #         # print(len(major_ticks))
+    #         md = start + len(clust_err)/2
+    #         if int(md) == md:
+    #             md = md + 0.5
+    #         # print(md)
+    #         minor_ticks.append(md)
+    #         minor_labels.append('Cluster ' + str(cluster))
+    #         start = start + len(clust_err) + 2
+    #         # print(start)
+    #
+    # ax.set_xticks(major_ticks, minor = False)
+    # ax.set_xticklabels(major_labels, rotation=45, ha='right', fontsize=6, minor = False)
+    # ax.minorticks_on()
+    # ax.set_xticks(minor_ticks, minor = True)
+    # ax.set_xticklabels(minor_labels, minor = True, fontsize = 30)
+    # ax.tick_params(axis='x', which='minor', pad=-30, direction='in')
+    # ax.set_ylabel('Error')
+    # fig.tight_layout()
+    # fig.savefig(path + 'seed' + str(fold) + '-per_met_err.pdf')
+    # plt.close(fig)
 
     num_mets = preds.shape[1]
-    if np.int(num_mets/37) < 1:
-        val = 1
+    if np.int(num_mets/37) <= 1:
+        val = 3
     else:
-        val = np.int(num_mets/37)
-    fig, ax = plt.subplots(8,1,figsize = (val*2,8))
+        val = np.int(num_mets/37) + 3
+    fig, ax = plt.subplots(8,1,figsize = (val,8))
     for s in range(8):
         ax[s].bar(np.arange(preds.shape[1]), preds[s,:].flatten().detach().numpy(), width = 0.85, alpha= 0.5, label = 'Predicted')
         ax[s].bar(np.arange(targets.shape[1]), targets[s, :].flatten(), width=0.85, alpha = 0.5, label = 'True')
@@ -684,25 +690,6 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
     RMSE_est = np.sqrt(np.sum(((preds.detach().numpy() - targets)**2)) / len(preds.flatten()))
     N_RMSE_est = np.round(RMSE_est / st.iqr(targets.flatten()),3)
 
-    figx, axx = plt.subplots(figsize=(8, 8))
-    color = cm.rainbow(np.linspace(0, 1, pred_z.shape[1]))
-    RMSE = np.zeros(pred_z.shape[0])
-    residuals = np.zeros(targets.shape)
-    preds_t = np.zeros(targets.shape)
-    for cluster in range(pred_z.shape[1]):
-        met_ids = np.where(pred_z[:, cluster]==1)[0]
-        if len(met_ids)==0:
-            continue
-    #     bins = int((total.max() - total.min()) / 5)
-        residuals[:, met_ids] = targets[:, met_ids] - preds[:, met_ids].detach().numpy()
-        preds_t[:, met_ids] = preds[:, met_ids].detach().numpy()
-        for i in range(len(met_ids)):
-            temp = np.sqrt(np.sum(((preds[:, met_ids[i]].detach().numpy() - targets[:, met_ids[i]])**2))/preds.shape[0])
-            iqr = st.iqr(targets[:, met_ids[i]])
-            RMSE[met_ids[i]] = temp / iqr
-
-        axx.scatter(preds_t[:, met_ids], residuals[:, met_ids], c=[color[cluster]],
-                    label='Cluster ' + str(cluster))
 
     # RMSE_avg = np.round(np.mean(RMSE),4)
     # RMSE_std = np.round(np.std(RMSE),4)
@@ -716,23 +703,18 @@ def plot_output(path, best_mod, out_vec, targets, true_vals,
     # RMSE_df = pd.Series(RMSE, index = ['Metabolite ' + str(i) for i in range(len(RMSE))])
     # RMSE_df.to_csv(path + 'seed' + str(fold) + 'RMSE.csv')
 
-    axx.set_title('Residuals plot for metabolite level predictions')
-    axx.set_xlabel('Predicted Levels')
-    axx.set_ylabel('Residuals')
-    axx.legend()
-    figx.savefig(path + 'seed' + str(fold) + '_residuals_' + type + '.png')
-    plt.close(figx)
 
 
-def plot_loss(fig3, ax3, fold, iterations, loss_vec, test_loss=None, lowest_loss = None):
+def plot_loss(fold, loss_vec, test_loss=None, lowest_loss = None):
+    fig3, ax3 = plt.subplots(figsize=(8, 8))
     # Plot loss given loss vector
     ax3.set_title('Seed ' + str(fold))
-    ax3.plot(iterations, loss_vec, label='training loss')
+    ax3.plot(np.arange(len(loss_vec)), loss_vec, label='training loss')
     if test_loss is not None:
-        ax3.plot(iterations, test_loss, label='test loss')
+        ax3.plot(np.arange(len(loss_vec)), test_loss, label='test loss')
         ax3.legend(loc = 'upper right')
     if lowest_loss is not None:
-        ax3.plot(iterations, lowest_loss, label='lowest loss')
+        ax3.plot(np.arange(len(loss_vec)), lowest_loss, label='lowest loss')
         ax3.legend(loc = 'upper right')
     ax3.set_yscale('log')
     return fig3, ax3

@@ -123,19 +123,34 @@ def pairwise_eval(guess, true):
     ri = (tp + tn)/(tp + fp + tn + fn)
     return tp, fp, tn, fn, ri
 
-def get_one_hot(x,l=None):
+def get_many_hot(x,l=None):
     # Get one-hot vector from index vector
     # x: single index or array of indices (i.e. x = 3 or x = [1, 3, 7])
     # l: length of one-hot vector
     # Returns: one-hot vector
     #   i.e. [0, 1, 0, 1, 0, 0, 0, 1]
     if l is None:
-        l = max(x)
+        l = max(x) + 1
     if torch.is_tensor(x):
         vec = torch.zeros(l)
     else:
         vec = np.zeros(l)
     vec[x] = 1
+    return vec
+
+def get_one_hot(x,l=None):
+    # Get one-hot matrix from index vector
+    # x: single index or array of indices (i.e. x = [1, 3, 7])
+    # l: # of categories
+    # Returns: one-hot vector
+    #   i.e. [[0, 1, 0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 1]]
+    if l is None:
+        l = max(x) + 1
+    if torch.is_tensor(x):
+        vec = torch.zeros((len(x), l))
+    else:
+        vec = np.zeros((len(x), l))
+    vec[np.arange(len(x)), x] = 1
     return vec
 
 def sigmoid(x):
@@ -153,7 +168,10 @@ def isclose(a, b, tol=1e-03):
 def get_epsilon(data):
     # For log transforming data, get the epsilon to add to the data (so as to not log transform zeros) where epsilon is
     # 0.1 times the minimum absolute non-zero value of the data
-    vals = np.array(data).flatten()
+    if torch.is_tensor(data):
+        vals = data.detach().numpy().flatten()
+    else:
+        vals = np.array(data).flatten()
     vals[np.where(vals == 0)[0]] = np.max(vals)
     epsilon = 0.1*np.min(np.abs(vals))
     return epsilon

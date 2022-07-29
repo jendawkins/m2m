@@ -5,7 +5,7 @@ from plot_helper import *
 from concrete import *
 import argparse
 import re
-from data_gen import *
+from synthetic_data_generation import *
 import sys
 from dataLoader import *
 # from rdk.rdk_fingerprints import *
@@ -19,150 +19,114 @@ from model import *
 import datetime
 from ete_tree.tree_plotter import *
 
+
 def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_path = '', plot_params = True,
                 met_class = None, bug_class = None):
-    # Calls model and trains over set epochs for given input arguments
-    # inputs:
-    # - args: input arguments from argument parser
-    # - device: cuda or not
-    # - x: microbial relative abundances
-    # - y: metabolic standardized levels
-    # - a_met: metabolite embedded locations
-    # - a_bug: microbial embedded locations
-    # - base_path: current working dir
-    # - plot_params: Whether to plot parameter traces or not (this can take time so sometimes I don't)
-    # - met_class: Which metabolite sub-class/level to use for initializing metabolite cluster centers and radii (only
-    #           used if a_met is not none
-    # - bug_class: Which microbe level (family, genus, species, etc) to use for initializing microbial cluster centers
-    #           and radii (I use family level)
-    # TO DO:
-    # - automatic stopping after loss stops decreasing / model has converged
-    # - make more effecient / faster
-    # - decide which plotting to keep and which to get rid of since that's a major time burden
-    # - torch distributed learning (like suhas does in MDITRE)
+    """
+    Calls model and trains over set epochs for given input arguments
+    inputs:
+    - args: input arguments from argument parser
+    - device: cuda or not
+    - x: microbial relative abundances
+    - y: metabolic standardized levels
+    - a_met: metabolite embedded locations
+    - a_bug: microbial embedded locations
+    - base_path: current working dir
+    - plot_params: Whether to plot parameter traces or not (this can take time so sometimes I don't)
+    - met_class: Which metabolite sub-class/level to use for initializing metabolite cluster centers and radii (only
+              used if a_met is not none
+    - bug_class: Which microbe level (family, genus, species, etc) to use for initializing microbial cluster centers
+              and radii (I use family level)
+    TO DO:
+    - automatic stopping after loss stops decreasing / model has converged
+    - make more effecient / faster
+    - decide which plotting to keep and which to get rid of since that's a major time burden
+    - torch distributed learning (like suhas does in MDITRE)
 
-    if args.linear == 1:
-        args.l1 = 0
+    """
+
     if x is not None and y is not None:
         metabs = y.columns.values
         seqs = x.columns.values
         args.learn = 'all'
         # set path for saving results
-        path = base_path + '/outputs/'
     else:
-        path = base_path + '/outputs_gen/'
         metabs = None
         seqs = None
+    path = base_path + '/outputs/'
     if not os.path.isdir(path):
         os.mkdir(path)
 
-    if 'none' in args.priors:
-        args.priors = []
-
-    params2learn = args.learn
-    priors2set = args.priors
     # add case to path for saving results
     path = path + args.case.replace(' ','_')
     if not os.path.isdir(path):
         os.mkdir(path)
 
-    # priors2set is for specfying specific parameters to put priors on, default is 'all' but you can specify a list if
-    # you don't want to put priors on all parameters (i.e. see how the model does without those priors)
-    if 'all' in priors2set:
-        priors2set = ['alpha','beta','mu_bug','mu_met','r_bug','r_met','pi_met','e_met','sigma']
-        if a_bug is None:
-            priors2set.append('w')
+    # args.fix fixes parameters to their generated value (if using synthetic data)
+    # This is pretty much for debugging
+    if args.fix and args.data != 'synthetic':
+        args.fix = None
 
-    # params2learn is the parameters that the model will learn; all other parameters will be fixed to their true value
-    # (args.fix does the same thing, but it's easier to use args.fix if you want to fix 1 parameter and easier to use
-    # params2learn if you want to learn only 1 parameter)
-    # This is pretty much for debugging; default is 'all'
-    # Also this only works if you are generating data, since otherwise you don't know the true values
-    if 'all' in params2learn:
-        params2learn = ['alpha','beta','mu_bug','mu_met','r_bug','r_met','pi_met','e_met','sigma']
-    if a_bug is None and 'w' not in params2learn:
-        params2learn.append('w')
-    # fix parameters specified in args.fix, and don't learn these parameters
-    if args.fix and x is None and y is None:
-        for p in args.fix:
-            if p in priors2set:
-                priors2set.remove(p)
-            if p in params2learn:
-                params2learn.remove(p)
 
     # if we fix some parameters, add another folder to path
-    if 'all' not in args.learn or 'all' not in args.priors or (args.fix and x is None and y is None):
-        path = path + '/learn_' + '_'.join(params2learn) + '-priors_' + '_'.join(priors2set) + '/'
+    if args.fix and args.data == 'synthetic':
+        path = path + '/fix_' + '_'.join(args.fix) + '/'
         if not os.path.isdir(path):
             os.mkdir(path)
-    if args.fix is not None:
-        if 'sigma' in args.fix:
-            params2learn.remove('sigma')
-            priors2set.remove('sigma')
-            path = path + '/fix-sigma/'
-            if not os.path.isdir(path):
-                os.mkdir(path)
 
 
     # add all other specified inputs to path to prevent overwriting results & keep a record of the parameters each model is run with
-    info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + '-hard'*args.hard + \
+    info = 'lr' + str(args.lr) + '-linear'*(args.linear) + '-adj_lr'*args.adjust_lr + \
             '-'*(1-args.linear) +args.nltype*(1-args.linear)*(args.data=='synthetic') + '-lm'*args.lm + '-lb'*args.lb + \
-            '-meas_var' + str(np.round(args.meas_var,3)).replace('.', '_') +  '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
-           '-L' + str(args.L) + '-K' + str(args.K) + '-gmm'*args.gmm + \
-           '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_') + '-l1'*args.l1
+            '-Nmet' + str(args.N_met) + '-Nbug' + str(args.N_bug) + \
+           '-L' + str(args.L) + '-K' + str(args.K) + \
+           '-atau' + str(args.a_tau).replace('.','_') + '-wtau' + str(args.w_tau).replace('.', '_')
 
     path = path + '/' + info + '/'
     if not os.path.isdir(path):
         os.mkdir(path)
 
     # If function is called without input x and y data, generate synthetic data by calling data_gen.py and then plot
-    if x is None and y is None:
+    if args.data == 'synthetic':
         x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
-        mu_met, r_bug, r_met, gen_u = generate_synthetic_data(
+        mu_met, r_bug, r_met = generate_synthetic_data(p=0.5,
             N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K,
-            N_bug_clusters = args.L,meas_var = args.meas_var,
-            repeat_clusters= 0, N_samples=args.N_samples, linear = args.linear,
-            nl_type = args.nltype, dist_var_frac=args.dist_var_frac, xdim=args.xdim, ydim = args.ydim)
+            N_bug_clusters = args.L,N_samples=args.N_samples, linear = args.linear,
+            nl_type = args.nltype, xdim=args.xdim, ydim = args.ydim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
 
-        plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
-                          r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
-
+        # plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+        #                   r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
         if a_met is not None:
             a_met = gen_met_locs
-
         if a_bug is not None:
             a_bug = gen_bug_locs
-
-        # get true values from data_gen.py to compare to learned parameter values
 
         # If we are learning the number of metabolite clusters or the number of microbial clusters,
         # need to expand the generated true parameter matrices to compare to learned parameters
         if args.lm:
             gen_z = np.hstack((gen_z, np.zeros((args.N_met, args.N_met - 1 - args.K))))
-            if ylocs is not None:
+            if a_met is not None:
                 mu_met = np.vstack((mu_met, np.zeros((args.N_met - args.K - 1, mu_met.shape[1]))))
                 r_met = np.append(r_met, np.zeros(args.N_met - 1 - len(r_met)))
             if args.linear:
                 gen_beta = np.hstack((gen_beta, np.zeros((gen_beta.shape[0], args.N_met - args.K - 1))))
             gen_alpha = np.hstack((gen_alpha, np.zeros((gen_alpha.shape[0], args.N_met - args.K - 1))))
         if args.lb:
-            if xlocs is not None:
+            if a_bug is not None:
                 r_bug = np.append(r_bug, np.zeros(args.N_bug - 1 - len(r_bug)))
                 mu_bug = np.vstack((mu_bug, np.zeros((args.N_bug - args.L - 1, mu_bug.shape[1]))))
             gen_w = np.hstack((gen_w, np.zeros((args.N_bug, args.N_bug - 1 - args.L))))
-            gen_u = np.hstack((gen_u, np.zeros((args.N_bug, args.N_bug - 1 - args.L))))
             if args.linear:
                 gen_beta = np.vstack((gen_beta, np.zeros((args.N_bug - args.L - 1, gen_beta.shape[1]))))
             gen_alpha = np.vstack((gen_alpha, np.zeros((args.N_bug - args.L - 1, gen_alpha.shape[1]))))
         # Dictionary of true values to compare to learned values
         true_vals = {'y':y, 'beta':gen_beta, 'alpha':gen_alpha, 'mu_bug': mu_bug,
-                     'mu_met': mu_met, 'u': gen_u,'w_soft': gen_w,'r_bug':1.2*r_bug, 'r_met': 1.2*r_met, 'z': gen_z,
+                     'mu_met': mu_met, 'r_bug':1.2*r_bug, 'r_met': 1.2*r_met, 'z': gen_z,
                      'w': gen_w, 'pi_met':np.expand_dims(np.sum(gen_z,0)/np.sum(np.sum(gen_z)),0),
                      'pi_bug':np.expand_dims(np.sum(gen_w,0)/np.sum(np.sum(gen_w)),0), 'bug_locs': gen_bug_locs,
-                     'met_locs':gen_met_locs,
-                     'e_met': np.expand_dims(np.sum(gen_z,0)/np.sum(np.sum(gen_z)),0),'b': mu_met, 'sigma': args.meas_var}
+                     'met_locs':gen_met_locs, 'e_met': np.expand_dims(np.sum(gen_z,0)/np.sum(np.sum(gen_z)),0)}
         # just for plotting; see the interaction b/w clusters
         if args.linear:
             true_vals['beta[1:,:]*alpha'] = gen_beta[1:,:]*sigmoid(gen_alpha)
@@ -170,68 +134,58 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         true_vals = None
 
     # Define model and initialize with input seed
-    net = Model(a_met, a_bug, K=args.K, L=args.L, l1 = args.l1,
-                compute_loss_for=priors2set, N_met = y.shape[1], N_bug = x.shape[1],
+    net = Model(a_met, a_bug, K=args.K, L=args.L,
+                N_met = y.shape[1], N_bug = x.shape[1], alpha_temp=args.a_tau[0], omega_temp=args.w_tau[1],
                 learn_num_bug_clusters=args.lb,learn_num_met_clusters=args.lm, linear = args.linear==1,
-                p_nn = args.p_num, data_meas_var = args.meas_var, met_class = met_class, bug_class = bug_class,
-                sample_w = args.hard, sample_a=args.hard, gmm = args.gmm)
-    net.initialize(args.seed)
-    net.to(device)
+                p_nn = args.p_num, data_meas_var = args.meas_var, met_class = met_class, bug_class = bug_class)
 
-    # Print the parameters that we have set a prior for and will compute a posterior loss for
-    print(net.compute_loss_for)
+    x = torch.Tensor(np.array(x)).to(device)
+    y = torch.Tensor(np.array(y))
+    net.initialize(args.seed, x, y)
+    net.to(device)
 
     # plot prior distributions for all parameters
     for param, dist in net.distributions.items():
-        parameter_dict = net.params[param]
-        try:
-            plot_distribution(dist, param, true_val = true_vals, ptype = 'prior', path = path, **parameter_dict)
-        except:
-            print(param + ' plot distribution error!!')
+        if param != 'NAM':
+            try:
+                plot_distribution(dist, param, true_val = true_vals, ptype = 'prior', path = path)
+            except:
+                print(param + ' plot distribution error!!')
 
     # Set tau schedules for alpha and omega given inputs
     alpha_tau_logspace = np.logspace(args.a_tau[0], args.a_tau[1], args.iterations)
     omega_tau_logspace = np.logspace(args.w_tau[0], args.w_tau[1], args.iterations)
-    net.alpha_temp = alpha_tau_logspace[0]
-    net.omega_temp = omega_tau_logspace[0]
 
     # Record initial parameter values (we will also record per epoch for plotting purposes)
     param_dict = {}
-    param_dict[args.seed] = {}
     start = 0
     for name, parameter in net.named_parameters():
-        if 'NAM' in name or 'lambda_mu' in name or name=='b' or name == 'C':
+        if 'NAM' in name:
             continue
-        if name not in params2learn:
+        if name in args.fix:
             if true_vals is not None:
-                if name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p' or name == 'pi_met':
+                if name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'pi_met':
                     setattr(net, name, nn.Parameter(torch.tensor(np.log(true_vals[name])).float(), requires_grad=False))
                 else:
                     setattr(net, name, nn.Parameter(torch.Tensor(true_vals[name]), requires_grad=False))
-            elif name == 'sigma':
-                setattr(net, name, nn.Parameter(torch.tensor(np.log(args.meas_var)).float(), requires_grad=False))
-        if name == 'z' or name == 'alpha' or name == 'w':
-            parameter = getattr(net, name + '_act')
-        if name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p':
-            parameter = np.exp(parameter.detach().numpy())
-        if name == 'pi_met':
-            parameter = torch.softmax(parameter.detach(),1).numpy()
-        if torch.is_tensor(parameter):
-            param_dict[args.seed][name] = [parameter.detach().numpy()]
         else:
-            param_dict[args.seed][name] = [parameter]
-    param_dict[args.seed]['z'] = [net.z_act.detach().numpy()]
-    if 'w' not in param_dict[args.seed].keys():
-        param_dict[args.seed]['w'] = [net.w_act.detach().numpy()]
+            if name == 'alpha':
+                param = getattr(net, name + '_act').detach().numpy()
+            else:
+                param = parameter.detach().numpy()
+            param_dict[name] = [param.copy()]
+
+    param_dict['z'] = [net.z_act.detach().numpy().copy()]
+    param_dict['w'] = [net.w_act.detach().numpy().copy()]
     if net.linear:
-        param_dict[args.seed]['beta[1:,:]*alpha'] = [net.beta[1:,:].detach().numpy()*net.alpha_act.detach().numpy()]
+        param_dict['beta*alpha'] = [net.beta[1:,:].detach().numpy()*net.alpha_act.detach().numpy()]
 
     # Plot initial metabolite and microbial classification / phylogenetic trees, to compare to learned trees
     if not os.path.isdir(path + '/init_clusters/'):
         os.mkdir(path + '/init_clusters/')
-    best_z = param_dict[args.seed]['z'][0]
-    best_w = np.round(param_dict[args.seed]['w'][0])
-    best_alpha = np.round(param_dict[args.seed]['alpha'][0])
+    best_z = param_dict['z'][0]
+    best_w = np.round(param_dict['w'][0])
+    best_alpha = np.round(param_dict['alpha'][0])
     if args.linear == 1:
         get_interactions_csv(path, 0, param_dict, args.seed)
     active_asv_clust = list(set(np.where(np.sum(best_w, 0) != 0)[0]).intersection(
@@ -253,88 +207,47 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             met_ix = metabs[met_ix]
         if not isinstance(met_ix[0], str):
             met_ix = [str(a) for a in met_ix]
-
         if args.data == 'cdi':
             plot_metab_tree(mets_keep = met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
                             out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
 
     # If embedding dimension = 2 and we have embedded locations input, plot output locations
     if a_met is not None and args.xdim == 2 and args.ydim == 2:
-        plot_output_locations(path, net, 0, param_dict[args.seed], args.seed, plot_zeros=1)
-    loss_vec = []
-    train_out_vec = []
-    lr_dict = {}
-    matching_dict = {}
+        plot_output_locations(path, net, 0, param_dict, args.seed, plot_zeros=1)
+
 
     # Adjust each parameter's learning rate based on parameter size
+    lr_dict = {}
     lr_list = []
-    ii = 0
+    size_beta = torch.mean(torch.abs(net.beta.detach().flatten()))
     for name, parameter in net.named_parameters():
-        if name in params2learn or 'all' in params2learn or 'NAM' in name:
-            if name not in net.lr_range.keys():
-                range = np.abs(np.max(parameter.detach().view(-1).numpy()) - np.min(parameter.detach().view(-1).numpy()))
-            else:
-                range = net.lr_range[name]
-            matching_dict[name] = ii
-            ii+= 1
-            if args.adjust_lr:
-                lr_list.append({'params': parameter, 'lr': (args.lr / net.lr_range['beta']) * range})
-            else:
-                lr_list.append({'params': parameter})
-            lr_dict[name] = [(args.lr / net.lr_range['beta'].item()) * range.item()]
+        size = torch.mean(torch.abs(parameter.detach().flatten()))
+        if args.adjust_lr:
+            lr_list.append({'params': parameter, 'lr': (args.lr / size_beta) * size})
+        else:
+            lr_list.append({'params': parameter})
+        lr_dict[name] = [(args.lr / size_beta) * size]
 
     # initialize optimizer with learning rates
     optimizer = optim.RMSprop(lr_list, lr=args.lr)
-    # record parameter size estimations and per-parameter learning rates
+
+    # record per-parameter learning rates
     if args.adjust_lr:
-        pd.Series(net.lr_range).to_csv(path + 'param_estimated_sizes.csv')
         pd.DataFrame(lr_dict).T.to_csv(path + 'per_param_lr.csv')
 
-    # If args.load == 1, load previously trained model and re-start training at the last saved epoch
-    epochs = re.findall('epoch\d+', ' '.join(os.listdir(path)))
-    path_orig = path
-    if len(epochs)>0:
-        if os.path.isfile(path_orig + 'seed' + str(args.seed) + '.txt'):
-            with open(path_orig + 'seed' + str(args.seed) + '.txt', 'r') as f:
-                largest = int(f.readlines()[0])
-        else:
-            largest = max([int(num.split('epoch')[-1]) for num in epochs])
-        foldername = path + 'epoch' + str(largest) + '/'
-        if 'seed' + str(args.seed) + '_checkpoint.tar' in os.listdir(foldername) and args.load==1:
-            checkpoint = torch.load(foldername + 'seed' + str(args.seed) + '_checkpoint.tar')
-            net.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            start = int(checkpoint['epoch'] - 1)
-            ix = int(checkpoint['epoch'])-1000
-            if ix >= len(alpha_tau_logspace):
-                ix = -1
-            if ix > -1:
-                net.alpha_temp = alpha_tau_logspace[ix]
-                net.omega_temp = omega_tau_logspace[ix]
-            else:
-                net.alpha_temp = alpha_tau_logspace[0]
-                net.omega_temp = omega_tau_logspace[0]
-            if args.iterations-1 <= start:
-                print('training complete')
-                sys.exit()
-            print('model loaded')
-        else:
-            print('no model loaded')
-    else:
-        print('no model loaded')
-
     # Train model over the number of specified input iterations in args.iterations
-    x = torch.Tensor(np.array(x)).to(device)
     loss_dict_vec = {}
     ix = 0
-
+    loss_vec = []
+    train_out_vec = []
+    path_orig = path
     for epoch in np.arange(start, args.iterations+1):
         if epoch ==1:
             stime = time.time()
         net.alpha_temp = alpha_tau_logspace[ix]
         net.omega_temp = omega_tau_logspace[ix]
         optimizer.zero_grad()
-        cluster_outputs, loss = net(x, torch.Tensor(np.array(y)))
+        cluster_outputs, loss = net(x, y)
         train_out_vec.append(cluster_outputs)
 
         # If model can't learn for whatever reason, set last_epoch = epoch so that the last successful epoch is plotted
@@ -356,25 +269,22 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
         # keep track of updated parameter values
         for name, parameter in net.named_parameters():
-            if 'NAM' in name or 'lambda_mu' in name or name=='b' or name == 'C':
+            if 'NAM' in name:
                 continue
-            if name == 'z' or name == 'alpha' or name == 'w':
-                parameter = getattr(net, name + '_act')
-            elif name == 'r_bug' or name == 'r_met' or name == 'e_met' or name == 'sigma' or name == 'p':
-                parameter = np.exp(parameter.detach().numpy())
-            elif name == 'pi_met':
-                parameter = torch.softmax(parameter.detach(), 1).numpy()
-            if torch.is_tensor(parameter):
-                param_dict[args.seed][name].append(parameter.detach().numpy())
+            if name == 'alpha':
+                param = getattr(net, name + '_act').detach().numpy()
             else:
-                param_dict[args.seed][name].append(parameter)
-        if 'w' not in net.named_parameters():
-            param_dict[args.seed]['w'].append(net.w_act.detach().numpy())
-        param_dict[args.seed]['z'].append(net.z_act.detach().numpy())
+                param = parameter.detach().numpy()
+            param_dict[name].append(param.copy())
+        param_dict['w'].append(net.w_act.detach().numpy().copy())
+        param_dict['z'].append(net.z_act.detach().numpy().copy())
         if net.linear:
-            param_dict[args.seed]['beta[1:,:]*alpha'].append(
-                net.beta[1:, :].detach().numpy() * net.alpha_act.detach().numpy())
+            param_dict['beta*alpha'].append(
+                net.beta[1:, :].detach().numpy().copy() * net.alpha_act.detach().numpy().copy())
 
+        if epoch > 200:
+            if epoch != last_epoch and (np.max(loss_vec[-100:]) - np.min(loss_vec[-100:])) <= 1:
+                last_epoch = epoch
 
         # Print the epoch and loss along the way to track progress
         if epoch % np.int(last_epoch/10) == 0:
@@ -391,34 +301,28 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 path = path.split('epoch')[0] + 'epoch' + str(epoch) + '/'
             if not os.path.isdir(path):
                 os.mkdir(path)
-            if net.met_embedding_dim is not None and net.met_embedding_dim == 2 and net.bug_embedding_dim==2:
-                plot_output_locations(path, net, -1, param_dict[args.seed], args.seed,
+            if net.met_embedding_dim == 2 and net.bug_embedding_dim==2 and args.locs != 'none':
+                plot_output_locations(path, net, -1, param_dict, args.seed,
                                       type='best_train', plot_zeros=False)
-                plot_output_locations(path, net, -1, param_dict[args.seed], args.seed,
+                plot_output_locations(path, net, -1, param_dict, args.seed,
                                       type='best_train', plot_zeros=True)
 
             if not os.path.isdir(path + 'seed' + str(args.seed) + '-clusters/'):
                 os.mkdir(path + 'seed' + str(args.seed) + '-clusters/')
             best_mod = np.argmin(loss_vec)
-            best_z = param_dict[args.seed]['z'][best_mod]
-            best_w = np.round(param_dict[args.seed]['w'][best_mod])
-            best_alpha = np.round(param_dict[args.seed]['alpha'][best_mod])
+            best_z = param_dict['z'][best_mod]
+            best_w = np.round(param_dict['w'][best_mod])
+            best_alpha = np.round(param_dict['alpha'][best_mod])
 
             # Save interactions if linear
             if args.linear == 1:
                 get_interactions_csv(path, best_mod, param_dict, args.seed)
 
             # save alpha and omega to see how close they are to one
-            if args.hard != 1:
-                pd.DataFrame(param_dict[args.seed]['alpha'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'alpha.csv')
-                pd.DataFrame(param_dict[args.seed]['w'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'omega.csv')
+            pd.DataFrame(param_dict['alpha'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'alpha.csv')
+            pd.DataFrame(param_dict['w'][best_mod]).to_csv(path + 'seed' + str(args.seed) + 'omega.csv')
 
-            # plot output locations if synthetic data
-            if args.data == 'synthetic':
-                plot_output_locations(path, net, best_mod, param_dict[args.seed], args.seed, plot_zeros = False)
-
-            else:
-
+            if args.data != 'synthetic':
                 # Plot each learned cluster's phylogenetic tree and metabolic classification tree
                 active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
                     set(np.where(np.sum(best_alpha,1)!= 0)[0])))
@@ -435,12 +339,6 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                         plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
                                       out_path=path + 'seed' + str(args.seed) + '-clusters/', data_path=base_path + '/inputs/' + args.data + '/',
                                       taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree.pdf')
-                    # inputs = ["python3", "tree_plotter.py", "-fun", 'asv', "-name", 'ASV_cluster_' + str(asv_clust) + '_tree.pdf',
-                    #      "-out", path + 'seed' + str(args.seed) + '-clusters/',"-data_path", base_path + '/inputs/' + args.data + '/',
-                    #           "-newick",base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx', "-feat"]
-                    # inputs.extend(asv_ix)
-                    # if args.data == 'cdi':
-                    #     subprocess.run(inputs,cwd=base_path + "/ete_tree")
                 if len(active_met_clust) > 20:
                     active_met_clust = active_met_clust[:20]
                 met_df = {}
@@ -451,14 +349,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     met_df['Cluster ' + str(met_clust)] = met_ix
                     if not isinstance(met_ix[0], str):
                         met_ix = [str(a) for a in met_ix]
-                    # inputs = ["python3", "tree_plotter.py", "-fun", 'metab', "-name", 'Met_cluster_' + str(met_clust) + '_tree.pdf',
-                    #      "-out", path+ 'seed' + str(args.seed) + '-clusters/', "-data_path", base_path + '/inputs/' + args.data + '/',
-                    #           "-newick", base_path + '/ete_tree/' + args.met_newick_name,"-feat"]
-                    # inputs.extend(met_ix)
                     if args.data == 'cdi':
                         plot_metab_tree(mets_keep=met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
                                         out_path= path+ 'seed' + str(args.seed) + '-clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree.pdf')
-                        # subprocess.run(inputs,cwd=base_path + "/ete_tree")
 
                 temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
                 temp.to_csv(path + str(args.seed) + 'mets_in_clusters.csv')
@@ -484,30 +377,29 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
 
             # Plot the loss per learned parameter
-            try:
-                plot_loss_dict(path_orig, args.seed, loss_dict_vec)
-            except:
-                print('no loss dict')
+            plot_loss_dict(path_orig, args.seed, loss_dict_vec)
 
             # Plot scatterplots of the active microbial cluster outputs versus the active metabolic cluster outputs to
             # see the relationship
             xdict, ydict= plot_xvy(path, x, train_out_vec, best_mod, param_dict, args.seed)
 
             # Plot parameter traces
-            if plot_params and args.load == 0:
-                plot_param_traces(path, param_dict[args.seed], params2learn, true_vals, net, args.seed)
-            fig3, ax3 = plt.subplots(figsize=(8, 8))
-            fig3, ax3 = plot_loss(fig3, ax3, args.seed, np.arange(len(loss_vec)), loss_vec, lowest_loss=None)
-            fig3.tight_layout()
-            fig3.savefig(path_orig + 'loss_seed_' + str(args.seed) + '.pdf')
-            plt.close(fig3)
+            if plot_params:
+                plot_param_traces(path, param_dict, true_vals, args.seed)
+
+            # plot loss
+            plot_loss(args.seed, loss_vec)
 
             # Plot posterior distribution histograms of each parameter
             plot_posterior(param_dict, args.seed, path_orig)
 
             # Plot predicted metabolic values per the first 5 participants
-            plot_output(path, best_mod, train_out_vec, np.array(y), true_vals, param_dict[args.seed],
-                                 args.seed, type = 'best_train', metabs = metabs, meas_var=args.meas_var)
+            plot_output(path, best_mod, train_out_vec, np.array(y.detach().numpy()), param_dict,
+                                 args.seed, meas_var=args.meas_var)
+
+            # save info about predicted metabolite clusters and microbe groups
+            save_cluster_results(path, best_mod, true_vals, args.seed,
+                                 param_dict, metabs=metabs, seqs=seqs)
 
             # Save the model at this epoch
             save_dict = {'model_state_dict':net.state_dict(),
@@ -536,6 +428,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             with open(path_orig + 'seed' + str(args.seed) + '_min_per_epoch.txt', 'w') as f:
                 f.writelines(str(epoch) + ': ' + str(np.round((etime - stime)/60, 3)) + ' minutes')
 
+            if epoch == last_epoch:
+                break
+
 
     etime = time.time()
     print('total time:' + str(etime - stime))
@@ -551,54 +446,42 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-learn", "--learn", help="params to learn", type=str, nargs='+', default = 'all')
     parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.1)
-    parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+')
-    parser.add_argument("-priors", "--priors", help="priors to set", type=str, nargs='+', default = 'all')
+    parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+', default = [])
     parser.add_argument("-case", "--case", help="case", type=str,
                         default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
     parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 10)
     parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 10)
     parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 3)
-    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 3)
+    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 5)
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
     parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
-    parser.add_argument("-load", "--load", help="0 to not load model, 1 to load model", type=int, default = 0)
     parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 0)
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
-    parser.add_argument("-hard", "--hard", help="whether or not to sample alpha and omega in the forward pass", type=int, default=0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 0, help = 'whether to run linear model or not')
+    parser.add_argument("-linear", "--linear", type = int, default = 1, help = 'whether to run linear model or not')
     parser.add_argument("-nltype", "--nltype", type = str, default = "exp",
                         help = 'if using synthetic data and linear == 0, how to non-linearly generate data'
                                'choices are: exp, poly, sine, linear, sigmoid')
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1,
                         help = "whether to adjust the learning rate based on the size of the parameter")
-    parser.add_argument("-dist_var_frac", "--dist_var_frac", type=float, default=0.5,
-                        help = "if generating data, how far apart to generate embedding points within a cluster. "
-                               "0.1 = very close, 0.9 = far")
     parser.add_argument("-p_num", "--p_num", type=int, default=1,
                         help = "if non-linear, how many neural networks per microbe cluster - metabolite cluster interaction"
                                "(i.e. p=1 means 1 NN per each interaction)")
-    parser.add_argument("-l1", "--l1", type = int, default = 0, help = "if non-linear, whether to regularize or not")
-
     parser.add_argument("-xdim", "--xdim", type=int, default=2, help = 'embedding dimension for microbes')
     parser.add_argument("-ydim", "--ydim", type=int, default=2, help = 'embedding dimension for metabolites')
-    parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.3, -3], help = 'annealing for alpha temparature')
-    parser.add_argument("-w_tau", "--w_tau", type=float, nargs='+', default=[-0.3, -3], help = 'anealing for omega temperature')
+    parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.01, -3], help = 'annealing for alpha temparature')
+    parser.add_argument("-w_tau", "--w_tau", type=float, nargs='+', default=[-0.01, -3], help = 'anealing for omega temperature')
     parser.add_argument("-locs","--locs", type = str, default = 'true',
                         help = 'true= use true microbe and metabolite embedded locations; '
                                                                                'none= dont use locations;'
                                                                                'rand= use random locations;')
-    parser.add_argument("-gmm", "--gmm", type=int, default=0, help = 'whether to run as gaussian mixture model or not '
-                                                                     '(i.e. if 1, zero out input and just cluster metabolites)')
     parser.add_argument("-dtype", "--dtype", type=str, default='pubchem_tanimoto',
                         help = "which type of distance embedding to use, choices are:" 
                                " 'stratified', 'clumps', '', 'pubchem_tanimoto', 'RDK_tanimoto','MACCS_tanimoto' ")
-    parser.add_argument("-data", "--data", type = str, default = 'cdi', help = "which input data to use; choices are: "
+    parser.add_argument("-data", "--data", type = str, default = 'synthetic', help = "which input data to use; choices are: "
                                                                                "'cdi', 'safari', 'synthetic' ")
-
     parser.add_argument("-saf_type", "--saf_type", type=str, default='polar', help= 'if args.data == safari, which safari data type to run'
                                                                                     'options are: polar, lipids-neg, or lipids-pos')
 
@@ -611,7 +494,6 @@ if __name__ == "__main__":
                         help='coefficient of variation percentile for metabolites')
     parser.add_argument("-cvb", "--coef_var_perc_bug", type=float, default=0,
                         help='coefficient of variation percentile for microbes')
-
 
     parser.add_argument("-most_corr", "--most_corr", type=int, default = 0,
                         help = 'whether to use the data with high correlation bw microbes and metabolites or not')
@@ -631,7 +513,6 @@ if __name__ == "__main__":
         os.mkdir(base_path + '/outputs/' + args.case)
 
     args.raw_data_path = '/inputs/' + args.data + '/'
-    # If args.data == 'synthetic', generate synthetic data
     if args.data == 'safari':
         # TO DO: calculate and use actual measurement variance of safari data, not just 0.1 default
         met_dict, asv_dict, res_dict = load_safari_data(data_path= base_path + args.raw_data_path,
@@ -657,11 +538,9 @@ if __name__ == "__main__":
         ylocs, xlocs, y_class, x_fams = None, None, None, None
 
     elif args.data == 'cdi':
-        calc_dim = True
         if args.most_corr == 1:
             xfile = 'x_high_corr.csv'
             yfile = 'y_high_corr.csv'
-
         else:
             yfile = 'y_' + str(int(args.non_zero_perc_met)) + '_' + str(int(args.coef_var_perc_met)) + '.csv'
             xfile = 'x_' + str(int(args.non_zero_perc_bug)) + '_' + str(int(args.coef_var_perc_bug)) + '.csv'
@@ -737,8 +616,6 @@ if __name__ == "__main__":
                     y = y[ixs]
                     ydist = ydist[ixs].loc[ixs]
 
-            print(x.shape)
-            print(y.shape)
             if args.xdim is None:
                 args.xdim, xlocs, xstress = mds_choose_d(xdist,seed = args.seed)
             else:
@@ -769,7 +646,6 @@ if __name__ == "__main__":
             x,y,ylocs,xlocs,y_class,x_fams = None, None, None, None, None, None
         else:
             x, y, ylocs, xlocs, y_class, x_fams = None, None, True, True, None, None
-        # args.N_samples = 49
 
 
     run_learner(args, device, x=x, y=y, base_path = base_path, a_met = ylocs, a_bug = xlocs, met_class = y_class, bug_class = x_fams)
