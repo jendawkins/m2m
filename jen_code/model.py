@@ -87,6 +87,25 @@ class Model(nn.Module):
                   use families, genus, species, etc)
 
         """
+        
+#         print('Inputs')
+#         print(met_locs, 
+#               microbe_locs, 
+#               N_met, 
+#               N_bug, 
+#               K,
+#               L,
+#               alpha_temp,
+#               omega_temp,
+#               data_meas_var,
+#               linear, 
+#               learn_num_met_clusters, 
+#               learn_num_bug_clusters,
+#               p_nn,
+#               met_class, 
+#               bug_class)
+#         print('Done')
+        
 
         # class for loss function
         self.MAPloss = MAPloss(self)
@@ -344,6 +363,7 @@ class Model(nn.Module):
 
 
     def forward(self, x, y):
+        
         # Forward function, contains all the model equations and calls MAP_loss.py to calculate loss
 
         # Omega and alpha epsilon are to keep w and alpha from getting to close to 0 or 1 and causing numerical issues

@@ -44,7 +44,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     - torch distributed learning (like suhas does in MDITRE)
 
     """
-
+    print('HERE')
+    print(a_met)
+    print('HEHE1')
     if x is not None and y is not None:
         metabs = y.columns.values
         seqs = x.columns.values
@@ -208,8 +210,11 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         if not isinstance(met_ix[0], str):
             met_ix = [str(a) for a in met_ix]
         if args.data == 'cdi':
-            plot_metab_tree(mets_keep = met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
-                            out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
+            try:
+                plot_metab_tree(mets_keep = met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
+                                out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
+            except:
+                print('Failed to plot metab tree')
 
     # If embedding dimension = 2 and we have embedded locations input, plot output locations
     if a_met is not None and args.xdim == 2 and args.ydim == 2:
@@ -248,6 +253,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
         net.omega_temp = omega_tau_logspace[ix]
         optimizer.zero_grad()
         cluster_outputs, loss = net(x, y)
+        print(cluster_outputs)
+        print(loss)
         train_out_vec.append(cluster_outputs)
 
         # If model can't learn for whatever reason, set last_epoch = epoch so that the last successful epoch is plotted
@@ -262,10 +269,22 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             optimizer.step()
             last_epoch = args.iterations
         except:
-            last_epoch = epoch
-            loss_vec.append(loss_vec[-1])
+            loss.backward()
+            loss_vec.append(loss.detach().item())
             for param in net.MAPloss.loss_dict:
-                loss_dict_vec[param].append(loss_dict_vec[param][-1])
+                if param not in loss_dict_vec.keys():
+                    loss_dict_vec[param] = [net.MAPloss.loss_dict[param].detach().item()]
+                else:
+                    loss_dict_vec[param].append(net.MAPloss.loss_dict[param].detach().item())
+            optimizer.step()
+            last_epoch = args.iterations
+            
+#         except:
+#             last_epoch = epoch
+#             print(loss_vec)
+#             loss_vec.append(loss_vec[-1])
+#             for param in net.MAPloss.loss_dict:
+#                 loss_dict_vec[param].append(loss_dict_vec[param][-1])
 
         # keep track of updated parameter values
         for name, parameter in net.named_parameters():
@@ -446,7 +465,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.1)
+    parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.001) #0.1
     parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+', default = [])
     parser.add_argument("-case", "--case", help="case", type=str,
                         default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
@@ -507,6 +526,7 @@ if __name__ == "__main__":
     base_path = os.getcwd()
     if '/M2M' not in base_path:
         base_path = '/Users/jendawk/M2M/'
+        base_path = '.'
     if not os.path.isdir(base_path + '/outputs/'):
         os.mkdir(base_path + '/outputs/')
     if not os.path.isdir(base_path + '/outputs/' + args.case):

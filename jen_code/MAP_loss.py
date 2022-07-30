@@ -53,13 +53,22 @@ class MAPloss():
     def marginalized_loss(self, outputs, true):
         # Marginalized loss over z, the metabolic cluster indicator
         if self.net.met_locs is not None:
-            eye = torch.eye(self.net.met_embedding_dim).unsqueeze(0).expand(self.net.K, -1, -1)
-            var = torch.exp(self.net.r_met).unsqueeze(-1).unsqueeze(-1).expand(-1,self.net.met_embedding_dim,
-                                                                               self.net.met_embedding_dim)*eye
-            mvn = MultivariateNormal(
-                self.net.mu_met.unsqueeze(1).expand(-1,self.net.N_met,-1),var.unsqueeze(1).expand(
-                    -1,self.net.N_met,-1,-1)).log_prob(
-                torch.Tensor(self.net.met_locs)).unsqueeze(1)
+            
+            try:
+                eye = torch.eye(self.net.met_embedding_dim).unsqueeze(0).expand(self.net.K, -1, -1)
+                var = torch.exp(self.net.r_met).unsqueeze(-1).unsqueeze(-1).expand(-1,self.net.met_embedding_dim,
+                                                                                   self.net.met_embedding_dim)*eye
+
+    #             print(eye)
+    #             print(var)
+    #             print(self.net.mu_met.unsqueeze(1).expand(-1,self.net.N_met,-1),var.unsqueeze(1) )
+                mvn = MultivariateNormal(
+                    self.net.mu_met.unsqueeze(1).expand(-1,self.net.N_met,-1),var.unsqueeze(1).expand(
+                        -1,self.net.N_met,-1,-1)).log_prob(
+                    torch.Tensor(self.net.met_locs)).unsqueeze(1)
+            except:
+                print('failed to get mvn')
+                mvn=0
         else:
             mvn = 0
 

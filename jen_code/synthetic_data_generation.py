@@ -52,7 +52,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
         X[:, outer_ixs] = np.stack([st.multinomial(int(np.round(g[n,l])), p[n].squeeze()
                                                    ).rvs() for n in range(len(p))]).squeeze()
 
-    X = X/np.sum(X)
+    X = X/np.sum(X, axis=1)[:, np.newaxis]
     g = g/np.sum(g)
 
     y_est = st.norm(0,1).rvs((N_samples, N_met_clusters))

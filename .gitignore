@@ -15,3 +15,5 @@ classy_fire.py
 ete_tree/classy_fire.py
 *.nhx
 env_sharable
+__pychache__
+simulation_results/*

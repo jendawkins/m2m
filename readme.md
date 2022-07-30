@@ -1,5 +1,26 @@
 # M2M
 
+## GA branch --
+
+My main changes in the code: 
+- introducing torch and PyTorch lightning wrappers to facilitate the orgaization of training and logging the results
+- looping through the cases as described in the overleaf
+
+
+To run the simulations as described in the overleaf, run:
+```bash
+python run_synthetic_simulations.py
+```
+
+This will populate results into a `simulation_results` directory
+
+
+
+
+
+
+## Jen's readme below
+
 This repository contains scripts for predicting metabolite levels from microbial relative abundances
 
 See the overleaf pdf, "Joint_co_clustering_and_prediction.pdf" to see the mathematical model
