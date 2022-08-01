@@ -34,25 +34,25 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         - file with list of lists where each list is a cluster of metabolites
     """
     # distribution of microbial relative abundances
-    plt.figure();
-    plt.hist(x.flatten(), bins=20);
-    plt.title('Microbe data distribution')
-    plt.savefig(path + 'bug_hist.png')
-    plt.close()
-
-    # distribution of microbial relative abundances summed into generated clusters
-    plt.figure();
-    plt.hist(g.flatten(), bins=20);
-    plt.title('Microbe cluster data distribution')
-    plt.savefig(path + 'bug_hist.png')
-    plt.close()
-
-    # distribution of metabolite levels
-    plt.figure();
-    plt.hist(y.flatten(), bins=20);
-    plt.title('Metabolite data distribution')
-    plt.savefig(path + 'met_hist.png')
-    plt.close()
+    # plt.figure();
+    # plt.hist(x.flatten(), bins=20);
+    # plt.title('Microbe data distribution')
+    # plt.savefig(path + 'bug_hist.png')
+    # plt.close()
+    #
+    # # distribution of microbial relative abundances summed into generated clusters
+    # plt.figure();
+    # plt.hist(g.flatten(), bins=20);
+    # plt.title('Microbe cluster data distribution')
+    # plt.savefig(path + 'bug_hist.png')
+    # plt.close()
+    #
+    # # distribution of metabolite levels
+    # plt.figure();
+    # plt.hist(y.flatten(), bins=20);
+    # plt.title('Metabolite data distribution')
+    # plt.savefig(path + 'met_hist.png')
+    # plt.close()
 
     bug_clusters = [np.where(gen_u[:,i])[0] for i in np.arange(gen_u.shape[1])]
 
@@ -97,8 +97,8 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
 
     b = x@gen_u
     bins = int((b.max() - b.min()) / 5)
-    if bins <= 10:
-        bins = 10
+    if bins <= 20:
+        bins = 20
     for k in range(b.shape[1]):
         ax2[1].hist(b[:,k].flatten(), range = (b.min(), b.max()), label = 'Cluster ' + str(k), alpha = 0.5, bins = bins)
     ax2[1].set_title('Histogram of microbe cluster sums')
@@ -118,8 +118,8 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
                                  alpha=0.2, color=p2.get_facecolor().squeeze(), label = 'Cluster ' + str(i))
             ax[1].add_patch(circle2)
         bins = int((y.max() - y.min())/5)
-        if bins<=10:
-            bins = 10
+        if bins<=20:
+            bins = 20
         ax2[2].hist(y[:, ix].flatten(), range=(y.min(), y.max()),
                     label='Cluster ' + str(i), alpha=0.5, bins = bins)
     ax2[2].set_xlabel('Standardized metabolite levels')
@@ -140,7 +140,10 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
 
     K = gen_z.shape[1]
     L = gen_u.shape[1]
-    fig, ax = plt.subplots(len(bug_active), 1, figsize=(8, 8 * len(bug_active)))
+    if len(bug_active) > 1:
+        fig, ax = plt.subplots(len(bug_active), 1, figsize=(8, 8 * len(bug_active)))
+    else:
+        fig, ax = plt.subplots(2, 1, figsize=(8, 8 * len(bug_active)))
     ii = 0
     # Microbe clusters vs metabolite cluster
     for bug_clust, met_clust in zip(bug_active, met_active):

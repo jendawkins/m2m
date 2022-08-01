@@ -2,29 +2,36 @@ from helper import *
 from plot_helper import *
 
 def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clusters = 2, N_bug_clusters = 2,
-                            seed = 3, measurement_var=0.1, xdim = 2, ydim = 2, p = 0.5, linear = False, nl_type = 'linear'):
-    np.random.seed(0)
+                            seed = 0, measurement_var=0.1, xdim = 2, ydim = 2, p = 0.5, linear = False,
+                            nl_type = 'linear',r_bug_desired = 0.3, r_met_desired = 0.3,
+                            nuisance = 0):
+    np.random.seed(seed)
     pi_bug = st.dirichlet([10/N_bug_clusters]*N_bug_clusters).rvs().squeeze()
     mu_bug = st.multivariate_normal(np.zeros(xdim), np.eye(xdim, xdim)).rvs(N_bug_clusters)
-    temp = st.norm(0,0.01).rvs(N_bug_clusters)
+    temp = st.norm(np.log(r_bug_desired),0.1).rvs(N_bug_clusters)
+
     r_bug = np.exp(temp)
     # r_bug = st.lognorm(0.01, 1).rvs(N_bug_clusters)
     w_id = st.multinomial(1, pi_bug).rvs(N_bug)
     bug_locs = np.zeros((N_bug, xdim))
+    fig, ax = plt.subplots()
     for clusters in range(N_bug_clusters):
         cluster_id = np.where(w_id[:,clusters]==1)[0]
         bug_locs[cluster_id, :] = st.multivariate_normal(mu_bug[clusters,:], 0.1*r_bug[clusters]*np.eye(xdim,
                                                                                      xdim)).rvs(len(cluster_id))
-    w_one_hot = np.zeros((N_bug, N_bug_clusters))
+    w_one_hot = w_id
     for cluster in np.arange(N_bug_clusters):
         ixs = np.linalg.norm(bug_locs - mu_bug[cluster,:], axis = 1) < r_bug[cluster]
         w_one_hot[ixs, cluster] = 1
 
+    if nuisance > 0:
+        nuis_ix = np.random.choice(np.arange(N_bug_clusters), nuisance)
+        w_one_hot[nuis_ix, :] = 1
 
     pi_met = st.dirichlet([10/N_met_clusters]*N_met_clusters).rvs().squeeze()
     mu_met = st.multivariate_normal(np.zeros(ydim), np.eye(ydim, ydim)).rvs(N_met_clusters)
     # r_met = st.lognorm(0.01, 1).rvs(N_met_clusters)
-    temp = st.norm(0,0.001).rvs(N_met_clusters)
+    temp = st.norm(np.log(r_met_desired),0.1).rvs(N_met_clusters)
     r_met = np.exp(temp)
     z_id = st.multinomial(1, pi_met).rvs(N_met)
     met_locs = np.zeros((N_met, ydim))
@@ -32,89 +39,109 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
         cluster_id = np.where(z_id[:, clusters] == 1)[0]
         met_locs[cluster_id, :] = st.multivariate_normal(mu_met[clusters,:], 0.1*r_met[clusters]*np.eye(ydim,
                                                                                      ydim)).rvs(len(cluster_id))
-    # z_gen = get_one_hot(z_id, N_met_clusters)
 
     beta = st.norm(0,1).rvs((N_bug_clusters + 1, N_met_clusters))
 
     alpha = st.bernoulli(p).rvs((N_bug_clusters, N_met_clusters))
 
+
     a = st.uniform(10,100).rvs()
     g = np.zeros((N_samples, N_bug_clusters))
-    X = np.zeros((N_samples, N_bug))
+    X_temp = np.zeros((N_samples, N_bug, N_bug_clusters))
+    mns = []
     for l in range(N_bug_clusters):
         b = st.uniform(10,100).rvs()
         g[:, l] = st.uniform(a, b).rvs(N_samples)
         a = a + b + st.uniform(10,100).rvs()
 
-        outer_ixs = np.where(w_one_hot[:,l]==1)[0]
-        conc = np.repeat(g[:, l:l+1], len(outer_ixs), axis = 1) / len(outer_ixs)
-        p = [st.dirichlet(conc[n,:]).rvs() for n in range(conc.shape[0])]
-        X[:, outer_ixs] = np.stack([st.multinomial(int(np.round(g[n,l])), p[n].squeeze()
-                                                   ).rvs() for n in range(len(p))]).squeeze()
+    for l in range(N_bug_clusters):
+        outer_ixs = np.where(w_one_hot[:, l] == 1)[0]
+        g_func = g[:, l:l+1]
+        conc = np.expand_dims(g_func[outer_ixs, 0]/(len(outer_ixs)*w_one_hot[outer_ixs,:].sum(1)),1)
+        p = [st.dirichlet(conc.squeeze()).rvs().squeeze() for n in range(N_samples)]
 
-    X = X/np.sum(X)
-    g = g/np.sum(g)
+        X_temp[:, outer_ixs, l] = np.stack([st.multinomial(int(np.round(g_func[n,:]*(
+            len(outer_ixs)/np.sum(w_one_hot[outer_ixs,:])))), p[n]).rvs() for n in range(N_samples)]).squeeze()
 
-    y_est = st.norm(0,1).rvs((N_samples, N_met_clusters))
-    g_new = np.hstack((np.ones((g.shape[0], 1)), g))
+
+    X = X_temp.sum(-1)
+    g_new = X@w_one_hot
+
+    X = X / np.expand_dims(np.sum(X, 1), 1)
+    g = g_new / np.expand_dims(np.sum(g_new, 1), 1)
+
     y = np.zeros((N_samples, N_met))
     for j in range(N_met):
         k = np.argmax(z_id[j,:])
+        g_temp = (g - np.mean(g, 0)) / np.std(g - np.mean(g, 0))
         if not linear:
-            g = (g - np.mean(g,0))/np.std(g-np.mean(g,0))
             if nl_type == 'exp':
-                y[:, j] = np.random.normal(beta[0, k] + np.exp(g) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+                y[:, j] = np.random.normal(beta[0, k] + np.exp(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'sigmoid':
-                y[:, j] = np.random.normal(beta[0, k] + sigmoid(g) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+                y[:, j] = np.random.normal(beta[0, k] + sigmoid(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'sin':
-                y[:, j] = np.random.normal(beta[0, k] + np.sin(g) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+                y[:, j] = np.random.normal(beta[0, k] + np.sin(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'poly':
-                y[:,j] = np.random.normal(beta[0, k] + (g)**5 @ (beta[1:, k] * alpha[:, k]) - (g)**4 @ (
+                y[:,j] = np.random.normal(beta[0, k] + (g_temp)**5 @ (beta[1:, k] * alpha[:, k]) - (g)**4 @ (
                         beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'linear':
-                y[:, j] = np.random.normal(beta[0, k] + g @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+                y[:, j] = np.random.normal(beta[0, k] + g_temp @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
         else:
-            y[:, j] = np.random.normal(beta[0, k] + g @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+            y[:, j] = np.random.normal(beta[0, k] + g_temp @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
 
     return X, y, g, beta, alpha, w_one_hot, z_id, bug_locs, met_locs, mu_bug, mu_met, r_bug, r_met
 
 if __name__ == "__main__":
-    N_bug = 60
-    N_met = 60
-    K=4
-    L=4
+    N_bug = 200
+    N_met = 800
+    K=10
+    L=10
+    N = 800
     # path = datetime.date.today().strftime('%m %d %Y').replace(' ','-') + '/'
     orig_path = 'data_gen/'
     if not os.path.isdir(orig_path):
         os.mkdir(orig_path)
-    repeat_clusters = 0
-    cluster_std = 1
 
+    r_default = 0.3
+    nl_type = 'linear'
     meas_var = 0.01
-    x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
-    mu_met, r_bug, r_met = generate_synthetic_data(N_met=N_met, N_bug=N_bug, N_met_clusters=K,
-                                                          N_bug_clusters=L, measurement_var=meas_var,
-                                                          N_samples=1000,
-                                                          )
-    plot_syn_data(orig_path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
-                                    np.log(r_bug), mu_met, np.log(r_met), gen_w, gen_alpha, gen_beta)
+    nuisance = 0
 
-    fig, ax = plt.subplots(K, L, figsize=(8 * L, 8 * K))
-    # ranges = [[np.max(microbe_sum[:,i]/out[:,j]) - np.min(microbe_sum[:,i]/out[:,j]) for i in range(out.shape[1])] for j in range(out.shape[1])]
-    # ixs = [np.argmin(r) for r in ranges]
-    g = x @ gen_w
-    for i in range(K):
-        ixs = np.where(gen_z[:, i] == 1)[0]
-        for j in range(L):
-            # ax[i].scatter(microbe_sum[:,ixs[i]], out[:,i])
-            for ii in ixs:
-                ax[i, j].scatter(g[:, j], y[:, ii])
-            ax[i, j].set_xlabel('Microbe sum')
-            ax[i, j].set_ylabel(r'$y_{i}$ when $i=$' + str(i))
-            ax[i, j].set_title('Metabolite Cluster ' + str(i) + ' vs Microbe Cluster ' + str(j))
-    fig.tight_layout()
-    fig.savefig(orig_path + '-sum_x_v_y.pdf')
-    plt.close(fig)
+    # for nuisance in [4,6,8,10,15,20]:
+    for meas_var in [0.01, 0.05, 0.1, 0.5, 1]:
+        for nl_type in ['linear', 'poly', 'exp', 'sigmoid']:
+            x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+            mu_met, r_bug, r_met = generate_synthetic_data(N_met=N_met, N_bug=N_bug, N_met_clusters=K,
+                                                                  N_bug_clusters=L, measurement_var=meas_var,
+                                                                  N_samples=N, p = 0.6, nuisance= nuisance,
+                                                                  linear=False, nl_type=nl_type,
+                                                           r_bug_desired=r_default, r_met_desired=r_default)
+            if np.isnan(y).any():
+                print('NAN data, meas_var=' + str(meas_var) + ', nl_type=' + str(nl_type) + ', r=' + str(r_default))
+                continue
+            path = orig_path + '/' + nl_type + '_r' + str(r_default).replace('.','-') + \
+                   '_mvar' + str(meas_var).replace('.','-') + 'nuisance' + str(nuisance) +  '/'
+            if not os.path.isdir(path):
+                os.mkdir(path)
+            plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+                                            r_bug, mu_met, r_met, gen_w, gen_alpha, gen_beta)
+
+            # fig, ax = plt.subplots(K, L, figsize=(8 * L, 8 * K))
+            # # ranges = [[np.max(microbe_sum[:,i]/out[:,j]) - np.min(microbe_sum[:,i]/out[:,j]) for i in range(out.shape[1])] for j in range(out.shape[1])]
+            # # ixs = [np.argmin(r) for r in ranges]
+            # g = x @ gen_w
+            # for i in range(K):
+            #     ixs = np.where(gen_z[:, i] == 1)[0]
+            #     for j in range(L):
+            #         # ax[i].scatter(microbe_sum[:,ixs[i]], out[:,i])
+            #         for ii in ixs:
+            #             ax[i, j].scatter(g[:, j], y[:, ii])
+            #         ax[i, j].set_xlabel('Microbe sum')
+            #         ax[i, j].set_ylabel(r'$y_{i}$ when $i=$' + str(i))
+            #         ax[i, j].set_title('Metabolite Cluster ' + str(i) + ' vs Microbe Cluster ' + str(j))
+            # fig.tight_layout()
+            # fig.savefig(orig_path + '-sum_x_v_y_v2.pdf')
+            # plt.close(fig)
 
 
 

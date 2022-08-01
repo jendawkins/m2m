@@ -33,24 +33,6 @@ class NAM(nn.Module):
             0, torch.sqrt(torch.exp(sigma))).sample([x.shape[0], self.K])
         return out
 
-# class NAM(nn.Module):
-#     def __init__(self):
-#         super(NAM, self).__init__()
-#         self.layers = nn.Sequential(
-#             nn.Linear(1, 8, bias=True),
-#             nn.ReLU(),
-#             nn.Linear(8, 8, bias=True),
-#             nn.ReLU(),
-#             nn.Linear(8, 6, bias=True),
-#             nn.ReLU(),
-#             nn.Linear(6, 1, bias=True)
-#         )
-#     def forward(self, x):
-#         out = self.layers(x)
-#         return out
-
-# TO DO:
-# - new initialization
 class Model(nn.Module):
     def __init__(self, met_locs, microbe_locs, N_met, N_bug, K = 2, L = 3,
                  alpha_temp = 1, omega_temp = 1, data_meas_var = 1,
