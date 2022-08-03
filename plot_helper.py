@@ -340,7 +340,7 @@ def plot_param_traces(path, param_dict, true_vals, fold):
                         trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
                     else:
                         trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
-                    if 'alpha' in name or 'w_act' in name:
+                    if 'alpha' in name or 'w_act' in name or 'z' in name:
                         mindat = -0.05
                         maxdat = 1.05
                     else:

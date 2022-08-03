@@ -17,7 +17,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     fig, ax = plt.subplots()
     for clusters in range(N_bug_clusters):
         cluster_id = np.where(w_id[:,clusters]==1)[0]
-        bug_locs[cluster_id, :] = st.multivariate_normal(mu_bug[clusters,:], 0.1*r_bug[clusters]*np.eye(xdim,
+        bug_locs[cluster_id, :] = st.multivariate_normal(mu_bug[clusters,:], (1/9)*r_bug[clusters]*np.eye(xdim,
                                                                                      xdim)).rvs(len(cluster_id))
     w_one_hot = w_id
     for cluster in np.arange(N_bug_clusters):
@@ -37,7 +37,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     met_locs = np.zeros((N_met, ydim))
     for clusters in range(N_met_clusters):
         cluster_id = np.where(z_id[:, clusters] == 1)[0]
-        met_locs[cluster_id, :] = st.multivariate_normal(mu_met[clusters,:], 0.1*r_met[clusters]*np.eye(ydim,
+        met_locs[cluster_id, :] = st.multivariate_normal(mu_met[clusters,:], (1/9)*r_met[clusters]*np.eye(ydim,
                                                                                      ydim)).rvs(len(cluster_id))
 
     beta = st.norm(0,1).rvs((N_bug_clusters + 1, N_met_clusters))
@@ -47,24 +47,37 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
 
     a = st.uniform(10,100).rvs()
     g = np.zeros((N_samples, N_bug_clusters))
-    X_temp = np.zeros((N_samples, N_bug, N_bug_clusters))
-    mns = []
+    # X_temp = np.zeros((N_samples, N_bug, N_bug_clusters))
+    X = np.zeros((N_samples, N_bug))
+    used_ixs = []
     for l in range(N_bug_clusters):
+        outer_ixs = np.where(w_one_hot[:, l] == 1)[0]
         b = st.uniform(10,100).rvs()
         g[:, l] = st.uniform(a, b).rvs(N_samples)
         a = a + b + st.uniform(10,100).rvs()
 
-    for l in range(N_bug_clusters):
-        outer_ixs = np.where(w_one_hot[:, l] == 1)[0]
-        g_func = g[:, l:l+1]
-        conc = np.expand_dims(g_func[outer_ixs, 0]/(len(outer_ixs)*w_one_hot[outer_ixs,:].sum(1)),1)
-        p = [st.dirichlet(conc.squeeze()).rvs().squeeze() for n in range(N_samples)]
+        overlap_ixs = list(set(outer_ixs).intersection(used_ixs))
+        outer_ixs = list(set(outer_ixs) - set(overlap_ixs))
+        if len(outer_ixs)==0:
+            g[:, l] = X[:, overlap_ixs].sum(1)
+        else:
+            g_func = g[:, l] - (X[:, overlap_ixs]).sum(1)
+            conc = np.expand_dims(g_func/(len(outer_ixs)),1)
+            p = [st.dirichlet(conc.squeeze()).rvs().squeeze() for n in range(N_samples)]
+            X[:, outer_ixs] = np.stack([st.multinomial(int(np.round(g_func[n])), p[n]).rvs() for n in range(N_samples)]).squeeze()
+            used_ixs.extend(outer_ixs)
 
-        X_temp[:, outer_ixs, l] = np.stack([st.multinomial(int(np.round(g_func[n,:]*(
-            len(outer_ixs)/np.sum(w_one_hot[outer_ixs,:])))), p[n]).rvs() for n in range(N_samples)]).squeeze()
+    # for l in range(N_bug_clusters):
+    #     outer_ixs = np.where(w_one_hot[:, l] == 1)[0]
+    #     g_func = g[:, l:l+1]
+    #     conc = np.expand_dims(g_func[outer_ixs, 0]/(len(outer_ixs)*w_one_hot[outer_ixs,:].sum(1)),1)
+    #     p = [st.dirichlet(conc.squeeze()).rvs().squeeze() for n in range(N_samples)]
+    #
+    #     X_temp[:, outer_ixs, l] = np.stack([st.multinomial(int(np.round(g_func[n,:]*(
+    #         len(outer_ixs)/np.sum(w_one_hot[outer_ixs,:])))), p[n]).rvs() for n in range(N_samples)]).squeeze()
 
 
-    X = X_temp.sum(-1)
+    # X = X_temp.sum(-1)
     g_new = X@w_one_hot
 
     X = X / np.expand_dims(np.sum(X, 1), 1)
@@ -92,13 +105,13 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     return X, y, g, beta, alpha, w_one_hot, z_id, bug_locs, met_locs, mu_bug, mu_met, r_bug, r_met
 
 if __name__ == "__main__":
-    N_bug = 200
-    N_met = 800
+    N_bug = 50
+    N_met = 80
     K=10
     L=10
-    N = 800
+    N = 200
     # path = datetime.date.today().strftime('%m %d %Y').replace(' ','-') + '/'
-    orig_path = 'data_gen/'
+    orig_path = 'NEW_data_gen/'
     if not os.path.isdir(orig_path):
         os.mkdir(orig_path)
 
@@ -106,6 +119,19 @@ if __name__ == "__main__":
     nl_type = 'linear'
     meas_var = 0.01
     nuisance = 0
+
+    # x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+    # mu_met, r_bug, r_met = generate_synthetic_data(N_met=N_met, N_bug=N_bug, N_met_clusters=K,
+    #                                                N_bug_clusters=L, measurement_var=meas_var,
+    #                                                N_samples=N, p=0.6, nuisance=nuisance,
+    #                                                linear=False, nl_type=nl_type,
+    #                                                r_bug_desired=r_default, r_met_desired=r_default)
+    # path = orig_path + '/' + nl_type + '_r' + str(r_default).replace('.', '-') + \
+    #        '_mvar' + str(meas_var).replace('.', '-') + 'nuisance' + str(nuisance) + '/'
+    # if not os.path.isdir(path):
+    #     os.mkdir(path)
+    # plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+    #               r_bug, mu_met, r_met, gen_w, gen_alpha, gen_beta)
 
     # for nuisance in [4,6,8,10,15,20]:
     for meas_var in [0.01, 0.05, 0.1, 0.5, 1]:
