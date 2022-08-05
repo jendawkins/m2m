@@ -152,6 +152,7 @@ class Model(nn.Module):
         if not self.linear:
             self.nam = NAM(self.L, self.K, p_nn = self.p_nn)
             self.distributions['NAM'] = Normal(0, 1000)
+        self.batch_norm = nn.BatchNorm1d(self.L)
 
 
         # If we have metabolite locations, we set a prior distribution for r_met and mu_met
@@ -167,12 +168,16 @@ class Model(nn.Module):
                 loc = np.median(radii)
 
             # Otheriwse, we set r_met to be the size of the embedding space divided by K
+                scale = np.var(radii)
             else:
-                scale = np.sqrt(np.sum((np.max(self.met_locs,0) - np.min(self.met_locs,0))**2))
+                scale = np.sum((np.max(self.met_locs,0) - np.min(self.met_locs,0))**2)
                 loc = scale / self.K
 
             # r_met is parameterized by a lognormal
-            self.distributions['r_met'] = LogNormal(torch.log(torch.tensor(loc)), scale = torch.tensor(1.0))
+            # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
+            mu = np.log(loc)
+            var = np.log(scale)
+            self.distributions['r_met'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
 
             # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
             # locations are already scaled to have variance 1)
@@ -189,11 +194,15 @@ class Model(nn.Module):
                     locs = self.microbe_locs[ixs,:]
                     radii.extend(pdist(locs))
                 loc = np.mean(radii)
+                scale = np.var(radii)
             else:
-                scale = np.sqrt(np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2))
+                scale = np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2)
                 loc = scale / self.L
 
-            self.distributions['r_bug'] = LogNormal(torch.log(torch.tensor(loc)), scale = torch.tensor(1.0))
+            # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
+            mu = np.log(loc)
+            var = np.log(scale)
+            self.distributions['r_bug'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
 
             self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim),
                                                               1e4*torch.eye(self.bug_embedding_dim))
@@ -259,12 +268,16 @@ class Model(nn.Module):
             for clust in np.arange(self.L):
                 cdist = scipy.spatial.distance.cdist(self.microbe_locs[kmeans.labels_==clust,:],
                                                      kmeans.cluster_centers_[clust:clust+1,:])
-                r.append(np.max(cdist.squeeze()))
+                if np.max(cdist.squeeze())==0:
+                    r.append(0.01)
+                else:
+                    r.append(np.max(cdist.squeeze()))
 
             self.r_bug = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
             kappa = torch.stack([((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1) for m in
                                  range(self.microbe_locs.shape[0])])
-            self.w = (self.r_bug - kappa)
+            # NEW!! Fixed error here (didn't have torch.exp)
+            self.w = (torch.exp(self.r_bug) - kappa)
         else:
             self.w = Normal(0,1).sample([self.N_bug, self.L])
 
@@ -279,8 +292,13 @@ class Model(nn.Module):
             for clust in np.arange(self.K):
                 cdist = scipy.spatial.distance.cdist(self.met_locs[kmeans.labels_ == clust, :],
                                                      kmeans.cluster_centers_[clust:clust + 1, :])
-                r.append(np.max(cdist.squeeze()))
+                if np.max(cdist.squeeze()) == 0:
+                    r.append(0.01)
+                else:
+                    r.append(np.max(cdist.squeeze()))
                 gp_size.append(np.sum(kmeans.labels_ == clust))
+            r = np.array(r)
+            r[r < 0.1] = 0.1
             self.r_met = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
             self.z_act = torch.Tensor(get_one_hot(kmeans.labels_, l = self.K))
             if self.learn_num_met_clusters:
@@ -327,7 +345,6 @@ class Model(nn.Module):
 
     def forward(self, x, y):
         # Forward function, contains all the model equations and calls MAP_loss.py to calculate loss
-
         # Omega and alpha epsilon are to keep w and alpha from getting to close to 0 or 1 and causing numerical issues
         omega_epsilon = self.omega_temp / 4
         alpha_epsilon = self.alpha_temp / 4
@@ -338,21 +355,23 @@ class Model(nn.Module):
             self.w_act = torch.sigmoid((torch.exp(self.r_bug) - kappa)/self.omega_temp)
         else:
             self.w_act = (1-2*omega_epsilon)*torch.sigmoid(self.w/self.omega_temp) + omega_epsilon
-
         g = x@self.w_act.float()
-        g_epsilon = get_epsilon(g)
-        g = torch.log(g + g_epsilon)
-        g = (g - torch.mean(g, 0))/ torch.std(g, 0)
 
+
+        # NEW: replaced normalization with batchnorm & log-transform g with set epsilon
+        g = torch.log(g + 0.001)
+        bn = self.batch_norm(g)
         self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
 
         if self.linear:
-            out_clusters = self.beta[0,:] + torch.matmul(g, self.beta[1:,:]*self.alpha_act) + \
-                           Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
+            out_clusters = self.beta[0,:] + torch.matmul(bn, self.beta[1:,:]*self.alpha_act) + \
+                           Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([bn.shape[0], self.K])
 
         else:
-            out_clusters = self.nam(g, self.alpha_act, self.beta, self.sigma)
+            out_clusters = self.nam(bn, self.alpha_act, self.beta, self.sigma)
 
+        if torch.isnan(out_clusters).any() or torch.isinf(out_clusters).any():
+            print('debug')
         # compute loss via the priors
         loss = self.MAPloss.compute_loss(out_clusters,y)
         return out_clusters, loss

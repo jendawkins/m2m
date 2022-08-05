@@ -37,17 +37,16 @@ class MAPloss():
         # - outputs: predicted metabolic cluster outputs
         # - true: true metabolite values
         self.loss_dict['y'] = self.marginalized_loss(outputs, true)
+
         total_loss = 0
         for name, parameter in self.net.named_parameters():
             if 'NAM' in name:
                 total_loss += self.NAM_loss(parameter)
-            else:
+            elif 'batch' not in name:
                 fun = getattr(self, name + '_loss')
                 fun()
                 total_loss += self.loss_dict[name]
         total_loss += self.loss_dict['y']
-        if torch.isnan(total_loss):
-            print('total loss is nan')
         return total_loss
 
     def marginalized_loss(self, outputs, true):

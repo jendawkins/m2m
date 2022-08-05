@@ -90,14 +90,14 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     if args.data == 'synthetic':
         x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
         mu_met, r_bug, r_met = generate_synthetic_data(p=0.5,
-            N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K,
-            N_bug_clusters = args.L,N_samples=args.N_samples, linear = args.linear,
+            N_met = args.N_met, N_bug = args.N_bug, N_met_clusters = args.K_true,
+            N_bug_clusters = args.L_true ,N_samples=args.N_samples, linear = args.linear,
             nl_type = args.nltype, xdim=args.xdim, ydim = args.ydim)
         if not args.linear:
             gen_beta = gen_beta[0,:]
+        plot_syn_data(path + '_seed{0}'.format(args.seed), x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
+                      r_bug, mu_met, r_met, gen_w, gen_alpha, gen_beta)
 
-        # plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs, mu_bug,
-        #                   r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta)
         if a_met is not None:
             a_met = gen_met_locs
         if a_bug is not None:
@@ -135,7 +135,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
     # Define model and initialize with input seed
     net = Model(a_met, a_bug, K=args.K, L=args.L,
-                N_met = y.shape[1], N_bug = x.shape[1], alpha_temp=args.a_tau[0], omega_temp=args.w_tau[1],
+                N_met = y.shape[1], N_bug = x.shape[1], alpha_temp=10**args.a_tau[0], omega_temp=10**args.w_tau[0],
                 learn_num_bug_clusters=args.lb,learn_num_met_clusters=args.lm, linear = args.linear==1,
                 p_nn = args.p_num, data_meas_var = args.meas_var, met_class = met_class, bug_class = bug_class)
 
@@ -153,8 +153,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 print(param + ' plot distribution error!!')
 
     # Set tau schedules for alpha and omega given inputs
-    alpha_tau_logspace = np.logspace(args.a_tau[0], args.a_tau[1], args.iterations)
-    omega_tau_logspace = np.logspace(args.w_tau[0], args.w_tau[1], args.iterations)
+    alpha_tau_logspace = np.logspace(args.a_tau[0], args.a_tau[1], args.iterations+1)
+    omega_tau_logspace = np.logspace(args.w_tau[0], args.w_tau[1], args.iterations+1)
 
     # Record initial parameter values (we will also record per epoch for plotting purposes)
     param_dict = {}
@@ -246,6 +246,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             stime = time.time()
         net.alpha_temp = alpha_tau_logspace[ix]
         net.omega_temp = omega_tau_logspace[ix]
+        ix += 1
         optimizer.zero_grad()
         cluster_outputs, loss = net(x, y)
         train_out_vec.append(cluster_outputs)
@@ -286,12 +287,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             if epoch != last_epoch and (np.max(loss_vec[-100:]) - np.min(loss_vec[-100:])) <= 1:
                 last_epoch = epoch
 
-        # Print the epoch and loss along the way to track progress
-        if epoch % np.int(last_epoch/10) == 0:
-            print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
-
         # at the last epoch, or at each 5000 epochs, plot results
-        if epoch == last_epoch or epoch % 5000 == 0 and epoch > 1:
+        if epoch == last_epoch or (epoch % 5000 == 0 and epoch > 1):
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
 
             # Make new path for new results
@@ -397,6 +394,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             plot_output(path, best_mod, train_out_vec, np.array(y.detach().numpy()), param_dict,
                                  args.seed, meas_var=args.meas_var)
 
+            plot_annealing(path, param_dict['w'], omega_tau_logspace, param_name='omega')
+            plot_annealing(path, param_dict['alpha'], alpha_tau_logspace, param_name='alpha')
+
             # save info about predicted metabolite clusters and microbe groups
             save_cluster_results(path, best_mod, true_vals, args.seed,
                                  param_dict, metabs=metabs, seqs=seqs)
@@ -430,6 +430,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
             if epoch == last_epoch:
                 break
+        elif epoch % np.int(last_epoch/10) == 0:
+            print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
 
 
     etime = time.time()
@@ -446,16 +448,20 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.1)
+    parser.add_argument("-lr", "--lr", help="learning rate", type=float, default = 0.001)
     parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+', default = [])
     parser.add_argument("-case", "--case", help="case", type=str,
                         default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
-    parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 10)
-    parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 10)
-    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 3)
-    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 5)
+    parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 50)
+    parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 30)
+    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 10)
+    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 10)
+    parser.add_argument("-L_true", "--L_true", help="true number of microbe clusters "
+                                                    "(for synthetic data generation)", type=int, default = 3)
+    parser.add_argument("-K_true", "--K_true", help="true number of metab clusters "
+                                                    "(for synthetic data generation)", type=int, default = 3)
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
-    parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
+    parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 1000)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
     parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 0)
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
@@ -471,8 +477,8 @@ if __name__ == "__main__":
                                "(i.e. p=1 means 1 NN per each interaction)")
     parser.add_argument("-xdim", "--xdim", type=int, default=2, help = 'embedding dimension for microbes')
     parser.add_argument("-ydim", "--ydim", type=int, default=2, help = 'embedding dimension for metabolites')
-    parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.01, -3], help = 'annealing for alpha temparature')
-    parser.add_argument("-w_tau", "--w_tau", type=float, nargs='+', default=[-0.01, -3], help = 'anealing for omega temperature')
+    parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.1, -2.5], help = 'annealing for alpha temparature')
+    parser.add_argument("-w_tau", "--w_tau", type=float, nargs='+', default=[-0.1, -1.5], help = 'anealing for omega temperature')
     parser.add_argument("-locs","--locs", type = str, default = 'true',
                         help = 'true= use true microbe and metabolite embedded locations; '
                                                                                'none= dont use locations;'

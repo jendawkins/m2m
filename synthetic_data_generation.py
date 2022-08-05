@@ -63,7 +63,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
         else:
             g_func = g[:, l] - (X[:, overlap_ixs]).sum(1)
             conc = np.expand_dims(g_func/(len(outer_ixs)),1)
-            p = [st.dirichlet(conc.squeeze()).rvs().squeeze() for n in range(N_samples)]
+            p = [st.dirichlet(np.repeat(conc.squeeze()[n], len(outer_ixs))).rvs().squeeze() for n in range(N_samples)]
             X[:, outer_ixs] = np.stack([st.multinomial(int(np.round(g_func[n])), p[n]).rvs() for n in range(N_samples)]).squeeze()
             used_ixs.extend(outer_ixs)
 

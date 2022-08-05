@@ -285,6 +285,15 @@ def plot_param_traces(path, param_dict, true_vals, fold):
     """
     fig_dict, ax_dict = {},{}
     for name, plist in param_dict.items():
+        if 'batch' in name and 'bias' in name:
+            continue
+        if true_vals is not None and name in true_vals.keys():
+            min_true = np.min(true_vals[name].flatten())
+            max_true = np.max(true_vals[name].flatten())
+            max_true = max_true + 0.1*max_true
+            min_true = min_true + 0.1*min_true
+        else:
+            min_true, max_true = 0,0
         if len(plist[0].shape) == 0:
             n = 1
         else:
@@ -315,10 +324,16 @@ def plot_param_traces(path, param_dict, true_vals, fold):
                     trace = [np.exp(p).squeeze()[k] for p in plist]
                     mindat = -0.05
                     maxdat = 1.05
+                elif 'r_' in name:
+                    trace = [np.exp(p).squeeze()[k] for p in plist]
+                    mindat = -0.05
+                    maxdat = np.max([np.max(trace) + 0.1 * np.mean(np.abs(trace)), max_true])
+                    if maxdat > 30:
+                        maxdat = 30
                 else:
                     trace = [p.squeeze()[k] for p in plist]
-                    mindat = np.min(trace) - 0.1*np.mean(np.abs(trace))
-                    maxdat = np.max(trace) + 0.1*np.mean(np.abs(trace))
+                    mindat = np.min([np.min(trace) - 0.1*np.mean(np.abs(trace)), min_true])
+                    maxdat = np.max([np.max(trace) + 0.1*np.mean(np.abs(trace)), max_true])
                 ax_dict[name][k].plot(trace, label='Trace')
 
                 if true_vals is not None:
@@ -336,16 +351,15 @@ def plot_param_traces(path, param_dict, true_vals, fold):
             else:
                 for j in range(nn):
                     new_k, new_j = k, j
-                    if 'r_' in name:
-                        trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
-                    else:
-                        trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
-                    if 'alpha' in name or 'w_act' in name or 'z' in name:
+                    # if 'r_' in name:
+                    #     trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
+                    trace = [p.squeeze()[new_k, new_j] for p in plist]
+                    if 'alpha' in name or 'w' in name or 'z' in name:
                         mindat = -0.05
                         maxdat = 1.05
                     else:
-                        mindat = np.min(trace) - 0.1 * np.mean(np.abs(trace))
-                        maxdat = np.max(trace) + 0.1 * np.mean(np.abs(trace))
+                        mindat = np.min([np.min(trace) - 0.1 * np.mean(np.abs(trace)), min_true])
+                        maxdat = np.max([np.max(trace) + 0.1 * np.mean(np.abs(trace)), max_true])
                     ax_dict[name][k, j].plot(trace, label='Trace')
                     if true_vals is not None:
                         if name in true_vals.keys():
@@ -833,6 +847,19 @@ def plot_dist(dist, path = '/Users/jendawk/Dropbox (MIT)/M2M/figures/'):
     plt.xlabel('pairwise distances')
     plt.savefig(path + 'dist-hist.pdf')
     plt.close()
+
+def plot_annealing(path, param_vec, temp_vec, param_name = 'omega'):
+    fig, ax = plt.subplots(2,1,figsize = (10,8))
+    param = [p.flatten()[0] for p in param_vec]
+    ax[0].plot(param)
+    ax[0].set_ylim(-0.05,1.05)
+    ax[0].set_title(param_name + ' trace')
+    ax[1].plot(temp_vec)
+    ax[1].set_yscale('log')
+    ax[1].set_title(param_name + ' annealing schedule')
+    fig.savefig(path + '/' + param_name + '_annealing_schedule.png')
+
+
 
 
 
