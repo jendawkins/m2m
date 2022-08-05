@@ -346,21 +346,22 @@ class Model(nn.Module):
     def forward(self, x, y):
         # Forward function, contains all the model equations and calls MAP_loss.py to calculate loss
         # Omega and alpha epsilon are to keep w and alpha from getting to close to 0 or 1 and causing numerical issues
-        omega_epsilon = self.omega_temp / 4
+        omega_epsilon = 1e-13
         alpha_epsilon = self.alpha_temp / 4
         if self.microbe_locs is not None:
             kappa = torch.stack(
                 [torch.sqrt(((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1)) for m in
                  np.arange(self.microbe_locs.shape[0])])
-            self.w_act = torch.sigmoid((torch.exp(self.r_bug) - kappa)/self.omega_temp)
+            self.w_act = (1-2*omega_epsilon)*torch.sigmoid((torch.exp(self.r_bug) - kappa)/self.omega_temp)+ omega_epsilon
         else:
             self.w_act = (1-2*omega_epsilon)*torch.sigmoid(self.w/self.omega_temp) + omega_epsilon
         g = x@self.w_act.float()
 
 
-        # NEW: replaced normalization with batchnorm & log-transform g with set epsilon
+        # log-transform g with set epsilon
         g = torch.log(g + 0.001)
-        bn = self.batch_norm(g)
+        bn = (g - torch.mean(g, 0)) / (torch.std(g, 0) + 1e-5)
+        # bn = self.batch_norm(g)
         self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
 
         if self.linear:
