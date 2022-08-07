@@ -53,8 +53,8 @@ def build_synthetic_datasets(args, val_size=500):
                                            N_met_clusters = args.K,
                                            N_bug_clusters = args.L,
                                            N_samples=args.N_samples + val_size, 
-                                           linear = 1, #args.linear,
-                                           nl_type = 'exp',# args.nltype, 
+                                           linear = False,# 1, #args.linear, jen: 'keep as 1'
+                                           nl_type = 'linear',# args.nltype, # jen: use 'linear' 
                                            xdim=args.xdim, 
                                            ydim = args.ydim
                                           )
@@ -117,8 +117,8 @@ class LitM2M(pl.LightningModule):
         return(self.val_loader)
     
     def forward(self, x, y):
-        yhat, loss = self.model(x, y)
-        return yhat, loss
+        yhat, loss, loss_dict = self.model(x, y)
+        return yhat, loss, loss_dict
 
     def split_batch(self, batch):
         return batch[0], batch[1], batch[2]
@@ -126,22 +126,37 @@ class LitM2M(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y, g = self.split_batch(batch)
         
-        y_hat, loss = self(x, y)
+        y_hat, loss, loss_dict = self(x, y)
         
+        self.log_dict(loss_dict)
         self.log('loss', loss)
         return {'loss':loss}
+    
+#     def on_after_backward(self):
+#         print('adjusting alpha')
+#         for p in self.model.parameters():
+#             p.data[torch.isnan(p.data)] = -1
+#         self.model.alpha.data[ torch.isnan(self.model.alpha.data) ] = -1.
+#         print( self.model.alpha )
+    
+    def on_validation_epoch_end(self):
+        self.log_dict({b:torch.trace(a.data)
+                 for b,a in self.model.named_parameters() if len(a.data.shape)>1 })
+#         print(self.model)
+        return(None)
     
 
     def validation_step(self, batch, batch_idx):
         x, y, g = self.split_batch(batch)
-        y_hat, loss = self(x, y)
+        y_hat, loss, loss_dict = self(x, y)
         self.log('val_loss', loss)
         return {'val_loss':loss}
  
     def configure_optimizers(self):
         # doing rmsprop to match jen's code, 
         # for now I'm not adding the 'adjust lr by parameter size' approach
-        return torch.optim.RMSprop(self.model.parameters(), lr=self.learning_rate)
+        return torch.optim.RMSprop(self.model.parameters(), lr=self.learning_rate, weight_decay=0)
+        # return torch.optim.SGD(self.model.parameters(), lr=self.learning_rate, weight_decay=0)
     
 
 
@@ -172,14 +187,14 @@ def run_training(train_dataset,
                             mode='min'
                             )
     
-    # object ot log model performance
+    # object to log model performance
     tube_logger = TestTubeLogger('simulation_results', 
                                   name=logger_path)#'test_tube_logger')
 
 
     # object ot train the model
-    trainer = pl.Trainer(max_epochs = 500,
-                         min_epochs=5,
+    trainer = pl.Trainer(max_epochs = 5000,
+                         min_epochs=500,
                          logger=tube_logger,
                          gpus = int( torch.cuda.is_available() ),
     #                      progress_bar_refresh_rate=0,

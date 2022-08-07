@@ -17,10 +17,11 @@ def run_analysis(case):
                      'N_bug':case['M'], 
                      'xdim':case['D'],
                      'ydim':case['D'], 
-                     'N_samples':case['N'], 
-                     'K':case['K'],
+                     'ydi':case['D'],
+		     'N_samples':case['N'], 
+                     'K':case['K'], ### this is fed into inits
                      'L':case['L'], 
-                     'lr':0.01,
+                     'lr':1e-2,#0.01,
                      'meas_var':0.1
                      })
     

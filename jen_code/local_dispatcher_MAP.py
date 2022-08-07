@@ -18,15 +18,17 @@ args = parser.parse_args()
 
 max_load = args.max_load
 
-param_dict = {('L', 'K'): [(5,5)], 'seed': [0,1,2],
-              'iter': 30000,
-              'lr': [0.1, 0.01, 0.001, 0.0001], 'meas_var': 0.10,
+param_dict = {('L', 'K'): [(10,10)], ('L_true', 'K_true'): [(2,2)],
+              'seed': [0,1,2,3,4,5],
+              'iter': 20000,
+              'lr': [0.01], 'meas_var': 0.010,
               'data': 'synthetic',
-              'linear': 1,
-              # 'nltype': ['sine', 'sigmoid', 'linear', 'poly', 'exp'],
-              'lm': [0], 'lb': [0], 'adjust_lr': [1],
-              'locs': ['true'], 'N_met': 50, 'N_bug': 50,
-              'case': 'new_data_gen'
+              'linear': 1, 'w_tau': [(-0.1, -1)],
+              'a_tau': [(-0.1, -3)],
+              'adjust_lr': [0,1],
+              'lm': [1], 'lb': [1],
+              'locs': ['true'], 'N_met': 40, 'N_bug': 40,
+              # 'case': 'new_data_gen'
               }
 
 

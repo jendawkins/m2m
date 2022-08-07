@@ -1,11 +1,12 @@
-#!/Users/jendawk/miniconda3/envs/M2M_CodeBase/bin python3
 from torch.distributions.dirichlet import Dirichlet
+import torch.nn.functional as F
 from helper import *
 from torch.distributions.log_normal import LogNormal
 from MAP_loss import *
 from sklearn.cluster import KMeans
 import scipy
 from torch import optim
+import hdbscan
 
 class NAM(nn.Module):
     def __init__(self, L, K, p_nn=1):
@@ -31,31 +32,19 @@ class NAM(nn.Module):
                  ], -1).sum(-1) for l in np.arange(self.L)], 1) for k in np.arange(self.K)], 2)
         out = beta + (out * alpha).sum(1) + Normal(
             0, torch.sqrt(torch.exp(sigma))).sample([x.shape[0], self.K])
-        return out
+        return F.softmax( out )
 
-# class NAM(nn.Module):
-#     def __init__(self):
-#         super(NAM, self).__init__()
-#         self.layers = nn.Sequential(
-#             nn.Linear(1, 8, bias=True),
-#             nn.ReLU(),
-#             nn.Linear(8, 8, bias=True),
-#             nn.ReLU(),
-#             nn.Linear(8, 6, bias=True),
-#             nn.ReLU(),
-#             nn.Linear(6, 1, bias=True)
-#         )
-#     def forward(self, x):
-#         out = self.layers(x)
-#         return out
-
-# TO DO:
-# - new initialization
 class Model(nn.Module):
-    def __init__(self, met_locs, microbe_locs, N_met, N_bug, K = 2, L = 3,
-                 alpha_temp = 1, omega_temp = 1, data_meas_var = 1,
-                 linear = True, learn_num_met_clusters = True, learn_num_bug_clusters = True,
-                p_nn = 1,met_class = None, bug_class = None):
+    def __init__(self, 
+                 met_locs, 
+                 microbe_locs, 
+                 alpha_temp = 1,
+                 omega_temp = 1, 
+                 data_meas_var = 1,
+                 linear = True,
+                 p_nn = 1,
+                 met_class = None, 
+                 bug_class = None):
         super(Model, self).__init__()
         """
                 This function initializes the Model and calls the loss class
@@ -87,26 +76,6 @@ class Model(nn.Module):
                   use families, genus, species, etc)
 
         """
-        
-#         print('Inputs')
-#         print(met_locs, 
-#               microbe_locs, 
-#               N_met, 
-#               N_bug, 
-#               K,
-#               L,
-#               alpha_temp,
-#               omega_temp,
-#               data_meas_var,
-#               linear, 
-#               learn_num_met_clusters, 
-#               learn_num_bug_clusters,
-#               p_nn,
-#               met_class, 
-#               bug_class)
-#         print('Done')
-        
-
         # class for loss function
         self.MAPloss = MAPloss(self)
 
@@ -121,136 +90,32 @@ class Model(nn.Module):
         self.bug_class = bug_class
 
         # Don't learn r and mu parameters if no locations are given
-        if self.microbe_locs is None:
-            if 'r_bug' in self.compute_loss_for:
-                self.compute_loss_for.remove('r_bug')
-            if 'mu_bug' in self.compute_loss_for:
-                self.compute_loss_for.remove('mu_bug')
-            self.bug_embedding_dim = None
-        else:
-            self.bug_embedding_dim = microbe_locs.shape[1]
-
-        if self.met_locs is None:
-            if 'r_met' in self.compute_loss_for:
-                self.compute_loss_for.remove('r_met')
-            if 'mu_met' in self.compute_loss_for:
-                self.compute_loss_for.remove('mu_met')
-            self.met_embedding_dim = None
-        else:
-            self.met_embedding_dim = met_locs.shape[1]
-
+        self.bug_embedding_dim = microbe_locs.shape[1]
+        self.met_embedding_dim = met_locs.shape[1]
+        
         # alpha parameter temperature, annealed over the course of learning
         self.alpha_temp = alpha_temp
 
         # omega parameter temperature, annealed over the course of learning
         self.omega_temp = omega_temp
 
-        # whether or not to learn the NUMBER of metabolite or bug clusters
-        self.learn_num_met_clusters = learn_num_met_clusters
-        self.learn_num_bug_clusters = learn_num_bug_clusters
-
         # whether or not to run the linear model vs the generalized NAM
         self.linear = linear
 
         # number of metabolites
-        self.N_met = N_met
+        self.N_met = met_locs.shape[0]
 
         # number of microbes
-        self.N_bug = N_bug
+        self.N_bug = microbe_locs.shape[0]
 
         # number of neural networks per metabolite cluster (default = 1)
         self.p_nn = p_nn
 
         # Measurment variance of data
         self.sigma = torch.tensor(data_meas_var).float()
-
-        # If we learn the number of microbe/metabolite clusters and met_class is not None and bug_class is not None,
-        # set the number of metabolomic clusters to the number of unique metabolite classes and the number of microbes
-        # to the number of unique microbial classes
-        # Otherwise, set to input L and K
-        self.L, self.K = L, K
-        if self.learn_num_met_clusters:
-            if self.met_class is not None:
-                self.K = len(np.unique(self.met_class.values))
-        if self.learn_num_bug_clusters:
-            if self.bug_class is not None:
-                self.L = len(np.unique(self.bug_class.values))
-
-
-        # Set the prior distributions parameters for each model parameter (to be called in MAP_loss.py when we find the
-        # loss of each parameter according to its prior)
-        # self.distributions is a dictionary of each parameter's prior distribution
-        self.distributions = {}
-
-
-        # define the NAM model if not linear
-        # This NAM is a set of neural networks for each metab-microbe cluster interaction. Each neural network has
-        # 2 hidden layers with 32 nodes in the first layer and 16 nodes in the second layer
-        if not self.linear:
-            self.nam = NAM(self.L, self.K, p_nn = self.p_nn)
-            self.distributions['NAM'] = Normal(0, 1000)
-
-
-        # If we have metabolite locations, we set a prior distribution for r_met and mu_met
-        if self.met_locs is not None:
-            # If we have metabolite categories (from taxonomy or elsewhere), we set the prior for r_met to be centered
-            # around the average embedded size of the given metabolite categories
-            if self.met_class is not None:
-                radii = []
-                for bc in np.unique(self.met_class.values):
-                    ixs = np.where(self.met_class.values == bc)[0]
-                    locs = self.met_locs[ixs,:]
-                    radii.extend(pdist(locs))
-                loc = np.median(radii)
-
-            # Otheriwse, we set r_met to be the size of the embedding space divided by K
-            else:
-                scale = np.sqrt(np.sum((np.max(self.met_locs,0) - np.min(self.met_locs,0))**2))
-                loc = scale / self.K
-
-            # r_met is parameterized by a lognormal
-            self.distributions['r_met'] = LogNormal(torch.log(torch.tensor(loc)), scale = torch.tensor(1.0))
-
-            # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
-            # locations are already scaled to have variance 1)
-            self.distributions['mu_met'] = MultivariateNormal(torch.zeros(self.met_embedding_dim),
-                                                              (torch.tensor(1.0e4)) * torch.eye(
-                                                                  self.met_embedding_dim))
-
-        # If we have input microbial locations, we do the same procedure as for input metabolic locations described above
-        if self.microbe_locs is not None:
-            if self.bug_class is not None:
-                radii = []
-                for bc in np.unique(self.bug_class.values):
-                    ixs = np.where(self.bug_class.values == bc)[0]
-                    locs = self.microbe_locs[ixs,:]
-                    radii.extend(pdist(locs))
-                loc = np.mean(radii)
-            else:
-                scale = np.sqrt(np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2))
-                loc = scale / self.L
-
-            self.distributions['r_bug'] = LogNormal(torch.log(torch.tensor(loc)), scale = torch.tensor(1.0))
-
-            self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim),
-                                                              1e4*torch.eye(self.bug_embedding_dim))
-
-
-        # beta is parameterized by a normal dist with mean=0, var = 1000
-        self.distributions['beta'] = Normal(0, np.sqrt(1e4))
-
-        # alpha is parameterized by a binary concrete with loc=1/(K*L) (defined above) and self.alpha_temp, which
-        # decreases throughout learning like self.omega_temp
-        self.alpha_loc = 0.5/L
-        self.distributions['alpha'] = BinaryConcrete(self.alpha_loc, self.alpha_temp)
-
-        # e_met is only learned (and thus the prior only used) if we are learning the number of metabolite clusters;
-        # we set dof=10 and scale = 10*K according to the recommendations in Malsiner-Walli et al
-        self.distributions['e_met'] = Gamma(10, 10*self.K)
-
-        # pi_met is set to a dirichlet prior with epsilon = 1/K; if we learn the number of metabolite clusters,
-        # we use epsilon=e_met instead of epsilon=1/K
-        self.distributions['pi_met'] = Dirichlet(torch.Tensor([1/self.K]*self.K))
+        
+        self.omega_epsilon = 1e-13
+        
 
     def train_NAM_for_init(self, x, y, iterations=1000, lr=0.1):
         """
@@ -282,57 +147,144 @@ class Model(nn.Module):
 
         return model_save, loss_vec
 
+    
+    def initialize_distributions(self, K=2, L=2):
+        # Set the prior distributions parameters for each model parameter (to be called in MAP_loss.py when we find the
+        # loss of each parameter according to its prior)
+        # self.distributions is a dictionary of each parameter's prior distribution
+        self.distributions = {}
+
+        # define the NAM model if not linear
+        # This NAM is a set of neural networks for each metab-microbe cluster interaction. Each neural network has
+        # 2 hidden layers with 32 nodes in the first layer and 16 nodes in the second layer
+        if not self.linear:
+            self.nam = NAM(L, K, p_nn = self.p_nn)
+            self.distributions['NAM'] = Normal(0, 1000)
+#         self.batch_norm = nn.BatchNorm1d(self.L)
+
+        
+        
+        # If we have metabolite locations, we set a prior distribution for r_met and mu_met
+        scale = np.sum((np.max(self.met_locs,0) - np.min(self.met_locs,0))**2)
+        loc = scale / K
+
+        # r_met is parameterized by a lognormal
+        # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
+        mu = np.log(loc)
+        var = np.log(scale)
+        self.distributions['r_met'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+
+        # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
+        # locations are already scaled to have variance 1)
+        self.distributions['mu_met'] = MultivariateNormal(torch.zeros(self.met_embedding_dim),
+                                                          (torch.tensor(1.0e4)) * torch.eye(
+                                                              self.met_embedding_dim))
+
+        # If we have input microbial locations, we do the same procedure as for input metabolic locations described above
+
+        scale = np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2)
+        loc = scale / self.L
+        # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
+        mu = np.log(loc)
+        var = np.log(scale)
+        self.distributions['r_bug'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+
+        self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim),
+                                                          1e4*torch.eye(self.bug_embedding_dim))
+
+
+        # beta is parameterized by a normal dist with mean=0, var = 1000
+        self.distributions['beta'] = Normal(0, np.sqrt(1e4))
+
+        # alpha is parameterized by a binary concrete with loc=1/(K*L) (defined above) and self.alpha_temp, which
+        # decreases throughout learning like self.omega_temp
+        self.alpha_loc = 0.5/L
+        self.distributions['alpha'] = BinaryConcrete(self.alpha_loc, self.alpha_temp)
+
+        # e_met is only learned (and thus the prior only used) if we are learning the number of metabolite clusters;
+        # we set dof=10 and scale = 10*K according to the recommendations in Malsiner-Walli et al
+        self.distributions['e_met'] = Gamma(10, 10*K)
+#         self.distributions['e_met'] = Gamma(1, 1./self.K)
+
+        # pi_met is set to a dirichlet prior with epsilon = 1/K; if we learn the number of metabolite clusters,
+        # we use epsilon=e_met instead of epsilon=1/K
+        self.distributions['pi_met'] = Dirichlet(torch.Tensor([1/K]*K))
+        return(None)
+
+    def init_clusters(self):
+        ## hdscan to determine and fit # of clusters
+
+        ### Fitting for metabolites
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=2)
+        clusterer.fit(self.met_locs)
+
+        cluster_centers = np.vstack( [ np.array( clusterer.weighted_cluster_centroid(a) ) if a>=0 
+                                    else np.zeros_like(clusterer.weighted_cluster_centroid(0))
+                                     for a in np.unique( clusterer.labels_ ) ] )
+
+        self.mu_met = nn.Parameter(torch.Tensor(
+                        np.vstack( cluster_centers )
+                                        ), 
+                                   requires_grad=True)
+
+        cdists = [ scipy.spatial.distance.cdist(self.met_locs[np.array(clusterer.labels_) == clust, :],
+                                                       cluster_centers[i:i + 1, :])
+                   for i,clust in enumerate(np.unique(clusterer.labels_) ) ]
+
+        
+        r = [ np.max(a) for a in cdists]
+        gp_size= list( pd.Series(clusterer.labels_).value_counts().sort_index().values )
+        self.K = len(gp_size)
+
+        self.r_met = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
+        self.z_act = torch.Tensor(get_one_hot(clusterer.labels_, l = self.K) )
+#         self.e_met = nn.Parameter( torch.Tensor(np.array(gp_size)), requires_grad=True)
+        self.e_met = nn.Parameter( torch.Tensor(np.ones(self.K)/self.K), requires_grad=True)
+        self.pi_met = nn.Parameter( torch.log( torch.Tensor(np.array(gp_size)/self.N_met).unsqueeze(0) ), 
+                                    requires_grad=True)
+
+
+
+
+
+        ### Fitting for microbes
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=2)
+        clusterer.fit(self.microbe_locs)
+
+        cluster_centers = np.vstack( [ clusterer.weighted_cluster_centroid(a) if a>=0 
+                                    else np.zeros_like(clusterer.weighted_cluster_centroid(0))
+                                     for a in np.unique( clusterer.labels_ ) ] )
+        self.mu_bug = nn.Parameter(torch.Tensor(
+                        np.vstack( cluster_centers )
+                                        ), 
+                                   requires_grad=True)
+
+        cdists = [ scipy.spatial.distance.cdist(self.microbe_locs[clusterer.labels_ == clust, :],
+                                                       cluster_centers[i:i + 1, :])
+                   for i,clust in enumerate(np.unique(clusterer.labels_)) ]
+        
+        self.L = len(cdists)
+
+        r = [ np.max(a) for a in cdists]
+        self.r_bug = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
+        kappa = torch.stack( [ ( (self.mu_bug - torch.tensor(self.microbe_locs[m, :]) 
+                                             ).pow(2)).sum(-1) 
+                              for m in range(self.microbe_locs.shape[0])
+                             ])
+        self.w = (self.r_bug - kappa)
+        self.w_act = torch.sigmoid(self.w / self.omega_temp)
+        return(None)
+
     # Initialize parameter values with given random seed
     def initialize(self, seed, x, y):
         torch.manual_seed(seed)
         np.random.seed(seed)
         self.seed = seed
+        
+        
+        self.init_clusters()
+        self.initialize_distributions(K=self.K, L=self.L)
 
-        # Initialize the microbe cluster means and radii using K-means
-        if self.microbe_locs is not None:
-            kmeans = KMeans(n_clusters=self.L, random_state=self.seed).fit(self.microbe_locs)
-            self.mu_bug = nn.Parameter(torch.Tensor(kmeans.cluster_centers_), requires_grad=True)
-            r = []
-            for clust in np.arange(self.L):
-                cdist = scipy.spatial.distance.cdist(self.microbe_locs[kmeans.labels_==clust,:],
-                                                     kmeans.cluster_centers_[clust:clust+1,:])
-                r.append(np.max(cdist.squeeze()))
-
-            self.r_bug = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
-            kappa = torch.stack([((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1) for m in
-                                 range(self.microbe_locs.shape[0])])
-            self.w = (self.r_bug - kappa)
-        else:
-            self.w = Normal(0,1).sample([self.N_bug, self.L])
-
-        self.w_act = torch.sigmoid(self.w / self.omega_temp)
-
-        # Initialize the metabolite cluster means and radii
-        if self.met_locs is not None:
-            kmeans = KMeans(n_clusters=self.K, random_state=self.seed).fit(self.met_locs)
-            self.mu_met = nn.Parameter(torch.Tensor(kmeans.cluster_centers_), requires_grad=True)
-            r = []
-            gp_size = []
-            for clust in np.arange(self.K):
-                cdist = scipy.spatial.distance.cdist(self.met_locs[kmeans.labels_ == clust, :],
-                                                     kmeans.cluster_centers_[clust:clust + 1, :])
-                r.append(np.max(cdist.squeeze()))
-                gp_size.append(np.sum(kmeans.labels_ == clust))
-            self.r_met = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
-            self.z_act = torch.Tensor(get_one_hot(kmeans.labels_, l = self.K))
-            if self.learn_num_met_clusters:
-                self.e_met = nn.Parameter(torch.Tensor(np.array(gp_size)), requires_grad=True)
-            else:
-                self.e_met = torch.Tensor(np.array(gp_size))
-            self.pi_met = nn.Parameter(torch.log(torch.Tensor(np.array(gp_size)/self.N_met).unsqueeze(0)), requires_grad=True)
-        else:
-            if self.learn_num_met_clusters:
-                self.e_met = nn.Parameter(torch.log(((1 / self.K) * torch.ones(self.K)).unsqueeze(0)), requires_grad=True)
-            else:
-                self.e_met = torch.log(((1 / self.K) * torch.ones(self.K)).unsqueeze(0))
-            self.pi_met = nn.Parameter(torch.log(Dirichlet(((1 / self.K) * torch.ones(self.K)).unsqueeze(0)).sample()), requires_grad=True)
-            z = Categorical(self.pi_met).sample([self.N_met])
-            self.z_act = torch.Tensor(get_one_hot(z, l = self.K))
 
         # Get microbial cluster inputs and metabolic cluster outputs for lasso regression to initialize biases and alphas
         temp = x.detach()@self.w_act.float()
@@ -351,10 +303,17 @@ class Model(nn.Module):
         smooth_selection[np.where(selection == 0)[0], np.where(selection==0)[1]] = 0 + 0.1*np.random.rand(np.sum(selection==0))
         self.alpha = nn.Parameter(torch.Tensor(np.log(smooth_selection/(1-smooth_selection)).T),requires_grad=True)
         self.alpha_act = torch.Tensor(selection.T)
-
+        
+        # set this as tensor so we don't need to adjust during the forward eqn
+        self.met_locs=torch.Tensor( self.met_locs )
         if self.linear:
             # If we are learning the linear model, set beta to the linear regression intercepts + coefficients
-            self.beta = nn.Parameter(torch.Tensor(np.vstack((np.expand_dims(lreg.intercept_,0), lreg.coef_.T))), requires_grad=True)
+            
+            self.f = nn.Linear(self.L, self.met_locs.shape[1])
+            self.beta = nn.Parameter( torch.zeros(self.N_met), requires_grad=True )
+            
+            
+#             self.beta = nn.Parameter(torch.Tensor(np.vstack((np.expand_dims(lreg.intercept_,0), lreg.coef_.T))), requires_grad=True)
         else:
             # If we are learning the non-linear model, set beta to the linear regression intercepts and train NAM
             self.beta = nn.Parameter(torch.Tensor(lreg.intercept_), requires_grad=True)
@@ -362,35 +321,72 @@ class Model(nn.Module):
             self.nam.load_state_dict(deepcopy(init_state_dict))
 
 
+
     def forward(self, x, y):
-        
+#         print('ITER')
+#         print(y)
+#         print([p for p in self.named_parameters()])
         # Forward function, contains all the model equations and calls MAP_loss.py to calculate loss
-
         # Omega and alpha epsilon are to keep w and alpha from getting to close to 0 or 1 and causing numerical issues
-        omega_epsilon = self.omega_temp / 4
+        
         alpha_epsilon = self.alpha_temp / 4
-        if self.microbe_locs is not None:
-            kappa = torch.stack(
-                [torch.sqrt(((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1)) for m in
-                 np.arange(self.microbe_locs.shape[0])])
-            self.w_act = torch.sigmoid((torch.exp(self.r_bug) - kappa)/self.omega_temp)
-        else:
-            self.w_act = (1-2*omega_epsilon)*torch.sigmoid(self.w/self.omega_temp) + omega_epsilon
-
+        
+        kappa = torch.stack(
+                [ torch.sqrt(
+                    ( ( self.mu_bug - torch.tensor( self.microbe_locs[m, :] ) ).pow(2)
+                       ).sum(-1) ) 
+                 for m in np.arange( self.microbe_locs.shape[0] ) ] )
+        
+#         print(kappa)
+        
+            # (1-2*self.omega_epsilon) * \             
+        self.w_act = torch.sigmoid((torch.exp(self.r_bug) - kappa)/self.omega_temp) + \
+                     self.omega_epsilon
+        
+#         print(self.w_act)
+    
         g = x@self.w_act.float()
-        g_epsilon = get_epsilon(g)
-        g = torch.log(g + g_epsilon)
-        g = (g - torch.mean(g, 0))/ torch.std(g, 0)
+        
+#         print(g)
+        
+        # log-transform g with set epsilon
+#         g = torch.log(g + 0.001)
+#         print(g)
+#         bn = (g - torch.mean(g, 0)) / (torch.std(g, 0) + 1e-5)
+#         print(bn)
+#         print(self.alpha)
+#         self.alpha_act = F.softmax( (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon )
 
-        self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
-
+#         print(self.alpha_act)
+#         print('Beta')
+#         print(self.beta.shape)
+#         print('G')
+#         print(g.shape)
+#         print(self.K)
+#         print(self.L)
+        
         if self.linear:
-            out_clusters = self.beta[0,:] + torch.matmul(g, self.beta[1:,:]*self.alpha_act) + \
-                           Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([g.shape[0], self.K])
+            out_clusters = self.beta + self.f(g) @ self.met_locs.T
+#             [0,:] + torch.matmul(bn, self.beta[1:,:]*self.alpha_act) 
+#             + \
+#                            Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([bn.shape[0], self.K])
 
         else:
-            out_clusters = self.nam(g, self.alpha_act, self.beta, self.sigma)
-
+            out_clusters = self.nam(bn, self.alpha_act, self.beta, self.sigma)
+            
+#         print(out_clusters)
+#         print(out_clusters.sum())
+        
+#         print(out_clusters)
+        if torch.isnan(out_clusters).any() or torch.isinf(out_clusters).any():
+            print('debug')
         # compute loss via the priors
         loss = self.MAPloss.compute_loss(out_clusters,y)
-        return out_clusters, loss
+#         print(loss)
+#         print(self.MAPloss.loss_dict)
+        return out_clusters, loss, self.MAPloss.loss_dict
+
+
+
+
+
