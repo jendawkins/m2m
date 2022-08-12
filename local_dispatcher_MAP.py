@@ -18,20 +18,22 @@ args = parser.parse_args()
 
 max_load = args.max_load
 
-param_dict = {('L', 'K'): [(10,10)], ('L_true', 'K_true'): [(2,2)],
+param_dict = {('L', 'K', 'lm', 'lb'): [(10,10,1,1)], ('L_true', 'K_true'): [(2,2)],
               'seed': [0,1,2,3,4,5],
               'iter': 20000,
-              'lr': [0.01], 'meas_var': 0.010,
+              'lr': [0.001], 'meas_var': 0.010,
               'data': 'synthetic',
-              'linear': 1, 'w_tau': [(-0.1, -1)],
-              'a_tau': [(-0.1, -3)],
-              'adjust_lr': [0,1],
-              'lm': [1], 'lb': [1],
+              'linear': 0, 'nltype': 'poly', 'w_tau': [(-0.1, -1.5)],
+              'a_tau': [(-0.1, -2.5)],
+              'adjust_lr': [1],
+              # 'lm': [1], 'lb': [1],
               'locs': ['true'], 'N_met': 40, 'N_bug': 40,
               # 'case': 'new_data_gen'
               }
 
 
+if args.case:
+    param_dict['case'] = args.case
 total_iters = np.prod([len(v) for v in param_dict.values() if hasattr(v, '__len__') and not isinstance(v, str)])
 print(total_iters)
 

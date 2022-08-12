@@ -355,14 +355,6 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in asv_df.items()]))
                 temp.to_csv(path + str(args.seed) + 'asvs_in_clusters.csv')
 
-            # Save the number of active metabolite and microbial clusters to a text file
-            if not os.path.isfile(path + 'Num_Clusters.txt'):
-                with open(path + 'Num_Clusters.txt', 'w') as f:
-                    f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
-            else:
-                with open(path + 'Num_Clusters.txt', 'a') as f:
-                    f.writelines('Seed ' + str(args.seed) + ', K: ' + str(len(active_met_clust)) + ', L: ' + str(len(active_asv_clust)) + '\n')
-
 
             # Save the lowest loss over the epochs to a text file
             if not os.path.isfile(path + 'Loss.txt'):
@@ -454,20 +446,20 @@ if __name__ == "__main__":
                         default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
     parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 50)
     parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 30)
-    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 10)
-    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 10)
+    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 3)
+    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 4)
     parser.add_argument("-L_true", "--L_true", help="true number of microbe clusters "
                                                     "(for synthetic data generation)", type=int, default = 3)
     parser.add_argument("-K_true", "--K_true", help="true number of metab clusters "
-                                                    "(for synthetic data generation)", type=int, default = 3)
+                                                    "(for synthetic data generation)", type=int, default = 4)
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
-    parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 1000)
+    parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
     parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 0)
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
-    parser.add_argument("-linear", "--linear", type = int, default = 1, help = 'whether to run linear model or not')
-    parser.add_argument("-nltype", "--nltype", type = str, default = "exp",
+    parser.add_argument("-linear", "--linear", type = int, default = 0, help = 'whether to run linear model or not')
+    parser.add_argument("-nltype", "--nltype", type = str, default = "poly",
                         help = 'if using synthetic data and linear == 0, how to non-linearly generate data'
                                'choices are: exp, poly, sine, linear, sigmoid')
     parser.add_argument("-adjust_lr", "--adjust_lr", type=int, default=1,
@@ -507,6 +499,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     print(sys.executable)
+
+    if args.L_true < args.L:
+        args.lb = 1
+    else:
+        args.lb = 0
+    if args.K_true < args.K:
+        args.lm = 1
+    else:
+        args.lb = 0
 
     args.case = args.data + '_' + args.locs + '_' + args.case
     dtype = args.dtype

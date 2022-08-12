@@ -133,10 +133,8 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
     fig2.savefig(path + 'cluster_histogram.png')
     plt.close(fig2)
 
-    try:
-        bug_active,met_active = np.where((gen_alpha * gen_beta[1:,:])>= 1e-6)
-    except:
-        bug_active, met_active = np.where((gen_alpha) >= 1e-6)
+    bug_active = np.where(gen_alpha.sum(1) >= 1e-6)[0]
+    met_active = np.where(gen_alpha.sum(0) >= 1e-6)[0]
 
     K = gen_z.shape[1]
     L = gen_u.shape[1]
@@ -148,6 +146,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
     # Microbe clusters vs metabolite cluster
     for bug_clust, met_clust in zip(bug_active, met_active):
         ixs = np.where(gen_z[:, met_clust] == 1)[0]
+        # ix_bug = np.where(gen_u[:, bug_clust]==1)[0]
         for ix in ixs:
             ax[ii].scatter(g[:,bug_clust], y[:, ix])
         ax[ii].set_xlabel('Microbe sum of cluster ' + str(bug_clust))
@@ -156,12 +155,13 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
         slope = np.round((np.max(y[:, ixs[0]]) - np.min(y[:, ixs[0]])) / ((np.max(g[:, bug_clust]) - np.min(g[:, bug_clust]))), 3)
         ax[ii].text(0.6, 0.8, 'slope = ' + str(slope), horizontalalignment='center',
                       verticalalignment='center', transform=ax[ii].transAxes)
-        ii += 1
         try:
             ax[ii].text(0.6, 0.6, 'beta = ' + str(gen_beta[bug_clust + 1, met_clust]), horizontalalignment='center',
                           verticalalignment='center', transform=ax[ii].transAxes)
         except:
+            ii += 1
             continue
+        ii += 1
     fig.tight_layout()
     fig.savefig(path + '-sum_x_v_y.png')
     plt.close(fig)
@@ -351,9 +351,10 @@ def plot_param_traces(path, param_dict, true_vals, fold):
             else:
                 for j in range(nn):
                     new_k, new_j = k, j
-                    # if 'r_' in name:
-                    #     trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
-                    trace = [p.squeeze()[new_k, new_j] for p in plist]
+                    if 'r_' in name:
+                        trace = [np.exp(p).squeeze()[new_k, new_j] for p in plist]
+                    else:
+                        trace = [p.squeeze()[new_k, new_j] for p in plist]
                     if 'alpha' in name or 'w' in name or 'z' in name:
                         mindat = -0.05
                         maxdat = 1.05
@@ -746,8 +747,10 @@ def plot_loss_dict(path, fold, loss_dict):
         ax[i].set_xlabel('Iterations')
         ax[i].set_ylabel('Loss')
         ax[i].set_title(param)
-        if param == 'y':
+        try:
             ax[i].set_yscale('log')
+        except:
+            continue
     fig.savefig(path + 'seed' + str(fold) + '_loss_dict.png')
 
 

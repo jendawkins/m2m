@@ -178,6 +178,7 @@ class Model(nn.Module):
             mu = np.log(loc)
             var = np.log(scale)
             self.distributions['r_met'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+            # self.distributions['r_met'] = HalfNormal(torch.tensor(10.0))
 
             # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
             # locations are already scaled to have variance 1)
@@ -204,6 +205,7 @@ class Model(nn.Module):
             var = np.log(scale)
             self.distributions['r_bug'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
 
+            # self.distributions['r_bug'] = HalfNormal(torch.tensor(10.0))
             self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim),
                                                               1e4*torch.eye(self.bug_embedding_dim))
 
@@ -213,7 +215,10 @@ class Model(nn.Module):
 
         # alpha is parameterized by a binary concrete with loc=1/(K*L) (defined above) and self.alpha_temp, which
         # decreases throughout learning like self.omega_temp
-        self.alpha_loc = 0.5/L
+        if self.learn_num_bug_clusters:
+            self.alpha_loc = 0.5/L
+        else:
+            self.alpha_loc = 1/L
         self.distributions['alpha'] = BinaryConcrete(self.alpha_loc, self.alpha_temp)
 
         # e_met is only learned (and thus the prior only used) if we are learning the number of metabolite clusters;
@@ -302,9 +307,9 @@ class Model(nn.Module):
             self.r_met = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
             self.z_act = torch.Tensor(get_one_hot(kmeans.labels_, l = self.K))
             if self.learn_num_met_clusters:
-                self.e_met = nn.Parameter(torch.Tensor(np.array(gp_size)), requires_grad=True)
+                self.e_met = nn.Parameter(torch.log(torch.Tensor(np.array(gp_size)/self.N_met)), requires_grad=True)
             else:
-                self.e_met = torch.Tensor(np.array(gp_size))
+                self.e_met = torch.log(torch.Tensor(np.array(gp_size)/self.N_met))
             self.pi_met = nn.Parameter(torch.log(torch.Tensor(np.array(gp_size)/self.N_met).unsqueeze(0)), requires_grad=True)
         else:
             if self.learn_num_met_clusters:
@@ -346,8 +351,8 @@ class Model(nn.Module):
     def forward(self, x, y):
         # Forward function, contains all the model equations and calls MAP_loss.py to calculate loss
         # Omega and alpha epsilon are to keep w and alpha from getting to close to 0 or 1 and causing numerical issues
-        omega_epsilon = 1e-13
-        alpha_epsilon = self.alpha_temp / 4
+        omega_epsilon = self.omega_temp / 10
+        alpha_epsilon = self.alpha_temp / 10
         if self.microbe_locs is not None:
             kappa = torch.stack(
                 [torch.sqrt(((self.mu_bug - torch.tensor(self.microbe_locs[m, :])).pow(2)).sum(-1)) for m in
@@ -365,8 +370,8 @@ class Model(nn.Module):
         self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
 
         if self.linear:
-            out_clusters = self.beta[0,:] + torch.matmul(bn, self.beta[1:,:]*self.alpha_act) + \
-                           Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([bn.shape[0], self.K])
+            out_clusters = self.beta[0,:] + torch.matmul(bn, self.beta[1:,:]*self.alpha_act)
+                           # + Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([bn.shape[0], self.K])
 
         else:
             out_clusters = self.nam(bn, self.alpha_act, self.beta, self.sigma)
