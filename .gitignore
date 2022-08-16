@@ -1,3 +1,5 @@
+*.csv
+__pycache__/*
 .ipynb_checkpoints
 ete_tree/classy_fire_results
 figures
@@ -15,5 +17,5 @@ classy_fire.py
 ete_tree/classy_fire.py
 *.nhx
 env_sharable
-__pychache__
+__pycache__
 simulation_results/*

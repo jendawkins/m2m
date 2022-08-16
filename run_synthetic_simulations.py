@@ -1,5 +1,5 @@
 import argparse
-from torch_wrapper_objects import build_synthetic_datasets, run_training
+from torch_wrapper_objects import build_synthetic_datasets, run_training, LitM2M
 
 ### running this file will store results in the `simulation_results` directory, 
 ### within a subdirectory that varies basaed on the simulation arguments
@@ -34,13 +34,41 @@ def run_analysis(case):
     
     
     ## builds model, runs training, logs results
-    run_training(train_dataset, 
-                 val_dataset, 
-                 gen_met_locs, 
-                 gen_bug_locs, 
-                 learning_rate=args.lr,
-                 logger_path=case_path
-                 )
+    fitted = run_training(train_dataset, 
+                         val_dataset, 
+                         gen_met_locs, 
+                         gen_bug_locs, 
+                         learning_rate=args.lr,
+                         logger_path=case_path
+                         )
+    return(fitted)
+    
+def reload_data(checkpoint_path):
+    case = {a[0]:int(a[1]) for a in [b.split('-') for b in checkpoint_path.split('/')[1].split('_')] }
+    
+    # from the case (as described in the overleaf), format the args for jen's code
+    args = AttrDict({'N_met':case['J'], 
+                     'N_bug':case['M'], 
+                     'xdim':case['D'],
+                     'ydim':case['D'], 
+                     'ydi':case['D'],
+                     'N_samples':case['N'], 
+                     'K':case['K'], ### this is fed into inits
+                     'L':case['L'], 
+                     'lr':1e-2,#0.01,
+                     'meas_var':0.1
+                     })
+    
+    ## build datasets
+    train_dataset, val_dataset, gen_met_locs, gen_bug_locs, \
+                x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+                    mu_met, r_bug, r_met = build_synthetic_datasets(args, return_all_info=True)
+    
+    return( x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+                    mu_met, r_bug, r_met )
+           
+    
+    
 
     
 def main():
@@ -61,7 +89,7 @@ def main():
                      'N':n,
                      'D':d} for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
     
-    for case in case_summaries:
+    for case in case_summaries:#[2:]
         run_analysis(case)
     
     

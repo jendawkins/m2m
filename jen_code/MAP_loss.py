@@ -39,18 +39,20 @@ class MAPloss():
         self.loss_dict['y'] = self.marginalized_loss(outputs, true)
 
         total_loss = 0
-        for name, parameter in self.net.named_parameters():
+        for name, parameter in [p for p in self.net.named_parameters()]:# + [ ['alpha', ''] ]:
+#             print(name)
             if 'NAM' in name:
+                print('am here')
                 total_loss += self.NAM_loss(parameter)
             elif 'batch' not in name:
-                try:
-                    fun = getattr(self, name + '_loss')
-                    fun()
-#                     print(fun)
+                name=name.replace('.', '_')
+                fun = getattr(self, name + '_loss')
+                fun()
+                
 #                     print(self.loss_dict[name])
-                    total_loss += self.loss_dict[name]
-                except:
-                    pass
+                total_loss += self.loss_dict[name]
+#                 except:
+#                     pass
         total_loss += self.loss_dict['y']
         return total_loss
 
@@ -61,7 +63,7 @@ class MAPloss():
 #         print('here')
         return( nn.functional.mse_loss(true, outputs ) )
         
-#         # Marginalized loss over z, the metabolic cluster indicator
+        # Marginalized loss over z, the metabolic cluster indicator
 #         if self.net.met_locs is not None:
 #             eye = torch.eye(self.net.met_embedding_dim).unsqueeze(0).expand(self.net.K, -1, -1)
 #             var = torch.exp(self.net.r_met).unsqueeze(-1).unsqueeze(-1).expand(-1,self.net.met_embedding_dim,
@@ -82,15 +84,34 @@ class MAPloss():
 #         return loss
 
     def alpha_loss(self):
-        # Computes loss for alpha, modeled as binary concrete with location self.net.alpha_loc and temperature
-        # self.net.alpha_temp
-        # Note that we compute the loss of alpha_act, which is the transformed version of alpha to be within 0 and 1
-        # (rather than the unconstrained net.alpha, which is what the model learns through gradient descent)
+#         Computes loss for alpha, modeled as binary concrete with location self.net.alpha_loc and temperature
+#         self.net.alpha_temp
+#         Note that we compute the loss of alpha_act, which is the transformed version of alpha to be within 0 and 1
+#         (rather than the unconstrained net.alpha, which is what the model learns through gradient descent)
 #         print(self.net.alpha_act)
-#         print(self.net.alpha_loc, self.net.alpha_temp)
+
 #         self.loss_dict['alpha'] = -BinaryConcrete(self.net.alpha_loc, self.net.alpha_temp).log_prob(
-#                 self.net.alpha_act).sum().sum()
+#                 self.net.alpha_act.T).sum().sum()
     
+    
+#         self.loss_dict['alpha'] = -BinaryConcrete(self.net.alpha_loc, .99).log_prob(
+#                 self.net.alpha_act.T).sum().sum()
+        
+        
+#         print(self.loss_dict['alpha'])
+# #         div=2
+# #         while self.loss_dict['alpha'].isinf() and div < 112:
+# #             self.loss_dict['alpha'] = -BinaryConcrete(self.net.alpha_loc, self.net.alpha_temp/div).log_prob(
+# #                 self.net.alpha_act).sum().sum()
+# #             print(self.loss_dict['alpha'])
+# #             div=div*2
+        
+        
+#         if self.loss_dict['alpha'].isinf():
+#             raise(ValueError('Trouble calculating alpha prior'))
+
+        self.loss_dict['alpha']=0
+
         pass
 
 
@@ -141,6 +162,18 @@ class MAPloss():
     def NAM_loss(self, w):
         # Loss for NAM
         return -self.net.distributions['NAM'].log_prob(w).mean()
+    
+    def NAM_loss(self, w):
+        # Loss for NAM
+        return -self.net.distributions['NAM'].log_prob(w).mean()
+    
+    def f_weight_loss(self):
+        self.loss_dict['f_weight'] = self.net.f.weight.data.pow(2).sum()
+        
+    def f_bias_loss(self):
+        self.loss_dict['f_bias'] = self.net.f.bias.data.pow(2).sum()
+    
+        
 
 
 

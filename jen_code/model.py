@@ -243,7 +243,9 @@ class Model(nn.Module):
         self.pi_met = nn.Parameter( torch.log( torch.Tensor(np.array(gp_size)/self.N_met).unsqueeze(0) ), 
                                     requires_grad=True)
 
-
+        
+        print(cluster_centers.shape)
+#         self.met_locs= torch.tensor( cluster_centers )
 
 
 
@@ -265,14 +267,15 @@ class Model(nn.Module):
         
         self.L = len(cdists)
 
-        r = [ np.max(a) for a in cdists]
+        r = [ np.max(a) for a in cdists ]
         self.r_bug = nn.Parameter(torch.log(torch.Tensor(np.array(r))), requires_grad=True)
         kappa = torch.stack( [ ( (self.mu_bug - torch.tensor(self.microbe_locs[m, :]) 
                                              ).pow(2)).sum(-1) 
                               for m in range(self.microbe_locs.shape[0])
                              ])
-        self.w = (self.r_bug - kappa)
+        self.w = ( self.r_bug - kappa )
         self.w_act = torch.sigmoid(self.w / self.omega_temp)
+#         self.microbe_locs = torch.Tensor( cluster_centers )
         return(None)
 
     # Initialize parameter values with given random seed
@@ -301,16 +304,17 @@ class Model(nn.Module):
         smooth_selection = selection.copy()
         smooth_selection[np.where(selection == 1)[0], np.where(selection==1)[1]] = 1 - 0.1*np.random.rand(np.sum(selection==1))
         smooth_selection[np.where(selection == 0)[0], np.where(selection==0)[1]] = 0 + 0.1*np.random.rand(np.sum(selection==0))
-        self.alpha = nn.Parameter(torch.Tensor(np.log(smooth_selection/(1-smooth_selection)).T),requires_grad=True)
+#         self.alpha = nn.Parameter(torch.Tensor(np.log(smooth_selection/(1-smooth_selection)).T),requires_grad=True)
+        self.alpha = torch.nn.Parameter( torch.ones((self.L, self.K))/self.K, requires_grad=True)#nn.Linear(self.L, self.K)
         self.alpha_act = torch.Tensor(selection.T)
+        
         
         # set this as tensor so we don't need to adjust during the forward eqn
         self.met_locs=torch.Tensor( self.met_locs )
         if self.linear:
             # If we are learning the linear model, set beta to the linear regression intercepts + coefficients
-            
-            self.f = nn.Linear(self.L, self.met_locs.shape[1])
-            self.beta = nn.Parameter( torch.zeros(self.N_met), requires_grad=True )
+            self.f = nn.Linear(self.L, self.L) #self.K) #self.met_locs.shape[1])
+            self.beta = nn.Parameter( torch.zeros(self.K), requires_grad=True )
             
             
 #             self.beta = nn.Parameter(torch.Tensor(np.vstack((np.expand_dims(lreg.intercept_,0), lreg.coef_.T))), requires_grad=True)
@@ -323,6 +327,8 @@ class Model(nn.Module):
 
 
     def forward(self, x, y):
+#         print(self.K)
+#         print(self.L)
 #         print('ITER')
 #         print(y)
 #         print([p for p in self.named_parameters()])
@@ -355,18 +361,25 @@ class Model(nn.Module):
 #         bn = (g - torch.mean(g, 0)) / (torch.std(g, 0) + 1e-5)
 #         print(bn)
 #         print(self.alpha)
-#         self.alpha_act = F.softmax( (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon )
+        self.alpha_act = F.softmax( (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon )
 
 #         print(self.alpha_act)
 #         print('Beta')
 #         print(self.beta.shape)
 #         print('G')
-#         print(g.shape)
+# #         print(g.shape)
 #         print(self.K)
 #         print(self.L)
-        
+#         print(self.met_locs.shape)
+    
         if self.linear:
-            out_clusters = self.beta + self.f(g) @ self.met_locs.T
+#             print(self.f(g).shape)
+#             print(self.alpha_act.shape)
+#             print(self.mu_met.shape)
+#             print(self.met_locs.shape)
+#             print(self.beta.shape)
+            
+            out_clusters = ( self.beta + self.f(g) @ self.alpha_act ) @ self.mu_met @ self.met_locs.T
 #             [0,:] + torch.matmul(bn, self.beta[1:,:]*self.alpha_act) 
 #             + \
 #                            Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([bn.shape[0], self.K])

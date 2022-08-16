@@ -39,7 +39,7 @@ class m2mDataset(Dataset):
     def __getitem__(self, idx):
         return [self.x[idx], self.y[idx], self.g[idx]]
     
-def build_synthetic_datasets(args, val_size=500):
+def build_synthetic_datasets(args, val_size=500, return_all_info=False):
     ## inputs the args, outputs the torch dataset objects, 
     ## and the summary params necessary for the model construction
     
@@ -63,11 +63,19 @@ def build_synthetic_datasets(args, val_size=500):
     # build dataloader object
     train_dataset=m2mDataset(x[:N], y[:N], g[:N])
     val_dataset=m2mDataset(x[N:], y[N:], g[N:])
-                   
-    return(train_dataset, 
+    
+    if return_all_info:
+        return(train_dataset, 
            val_dataset,
            gen_met_locs,
-           gen_bug_locs)
+           gen_bug_locs, 
+              x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
+        mu_met, r_bug, r_met)
+    else:
+        return(train_dataset, 
+               val_dataset,
+               gen_met_locs,
+               gen_bug_locs)
 
     
 
@@ -95,8 +103,6 @@ class LitM2M(pl.LightningModule):
                          gen_met_locs.shape[0],
                          gen_bug_locs.shape[0]
                          )
-        
-        self.model.initialize(0, train_dataset.x, train_dataset.y)
         
         
         # set lr
@@ -178,6 +184,8 @@ def run_training(train_dataset,
                   learning_rate=learning_rate
                   )
     
+    litm2m.model.initialize(seed=0, x= train_dataset.x, y=train_dataset.y)
+    
     # callback for model saving, checkpoints
     checkpoint_callback=ModelCheckpoint(
                             dirpath = 'simulation_results',
@@ -189,7 +197,7 @@ def run_training(train_dataset,
     
     # object to log model performance
     tube_logger = TestTubeLogger('simulation_results', 
-                                  name=logger_path)#'test_tube_logger')
+                                  name=logger_path )#'test_tube_logger')
 
 
     # object ot train the model
@@ -208,14 +216,7 @@ def run_training(train_dataset,
     # run training
     trainer.fit(litm2m)
     
-    return(None)
-    
-    
-    
-    
-    
-    
-    
+    return(litm2m)  
     
     
     
