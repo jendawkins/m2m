@@ -21,7 +21,7 @@ max_load = args.max_load
 param_dict = {('L', 'K', 'lm', 'lb'): [(10,10,1,1)], ('L_true', 'K_true'): [(2,2)],
               'seed': [0,1,2,3,4,5],
               'iter': 20000,
-              'lr': [0.001], 'meas_var': 0.010,
+              'lr': [0.001], 'meas_var': 0.10,
               'data': 'synthetic',
               'linear': 0, 'nltype': 'poly', 'w_tau': [(-0.1, -1.5)],
               'a_tau': [(-0.1, -2.5)],

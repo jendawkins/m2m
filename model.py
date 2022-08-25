@@ -371,8 +371,6 @@ class Model(nn.Module):
 
         if self.linear:
             out_clusters = self.beta[0,:] + torch.matmul(bn, self.beta[1:,:]*self.alpha_act)
-                           # + Normal(0,torch.sqrt(torch.exp(self.sigma))).sample([bn.shape[0], self.K])
-
         else:
             out_clusters = self.nam(bn, self.alpha_act, self.beta, self.sigma)
 

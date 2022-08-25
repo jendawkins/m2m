@@ -36,7 +36,7 @@ class MAPloss():
         # inputs:
         # - outputs: predicted metabolic cluster outputs
         # - true: true metabolite values
-        self.loss_dict['y'] = self.marginalized_loss(outputs, true)
+        self.loss_dict['y'] = self.marginalized_loss_2(outputs, true)
 
         total_loss = 0
         for name, parameter in self.net.named_parameters():
@@ -67,9 +67,52 @@ class MAPloss():
         eps = 1e-10
         temp = (1-2*eps)*torch.softmax(self.net.pi_met,1) + eps
         z_log_probs = torch.log(temp.T).unsqueeze(1) + mvn + \
-               Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), torch.sqrt(torch.exp(self.net.sigma))).log_prob(true)
+                Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met),
+                       torch.sqrt(torch.exp(self.net.sigma))).log_prob(true)
         self.net.z_act = nn.functional.one_hot(torch.argmax(z_log_probs.sum(1),0),self.net.K)
         loss = -torch.logsumexp(z_log_probs, 0).sum(1).sum()
+        return loss
+
+    def marginalized_loss_2(self, outputs, true):
+        eps = 1e-10
+        temp = (1 - 2 * eps) * torch.softmax(self.net.pi_met, 1) + eps
+
+        mvn = torch.empty(self.net.K, 1, self.net.N_met)
+        norm = torch.empty(self.net.K, outputs.shape[0], self.net.N_met)
+        for k in np.arange(self.net.K):
+            var = torch.exp(self.net.r_met[k]) * torch.eye(self.net.met_embedding_dim)
+            mvn[k,:,:] = MultivariateNormal(self.net.mu_met[k,:], var).log_prob(
+                torch.Tensor(self.net.met_locs)).unsqueeze(0)
+
+            norm[k,:,:] = Normal(outputs[:, k], torch.sqrt(torch.exp(self.net.sigma))).log_prob(true.T).T
+
+        log_probs = mvn + norm + torch.log(temp).T.unsqueeze(1)
+        probs = torch.exp(log_probs)
+        z_most_likely = nn.functional.one_hot(torch.argmax(probs.sum(1),0),self.net.K)
+        marg_probs = probs.sum(0)
+        loss = -torch.log(marg_probs).sum(1).sum()
+
+        # above is what torch.logsumexp does, but the above often results in numerical issues which is why I use this
+        loss = -torch.logsumexp(log_probs, 0).sum(1).sum()
+
+
+
+
+        # Original calculations (you can check and see that they are the exact same results as above but without the for loop)
+        eye = torch.eye(self.net.met_embedding_dim).unsqueeze(0).expand(self.net.K, -1, -1)
+        var_orig = torch.exp(self.net.r_met).unsqueeze(-1).unsqueeze(-1).expand(-1, self.net.met_embedding_dim,
+                                                                             self.net.met_embedding_dim) * eye
+        mvn_orig = MultivariateNormal(
+            self.net.mu_met.unsqueeze(1).expand(-1, self.net.N_met, -1), var_orig.unsqueeze(1).expand(
+                -1, self.net.N_met, -1, -1)).log_prob(
+            torch.Tensor(self.net.met_locs)).unsqueeze(1)
+        eps = 1e-10
+        temp_orig = (1-2*eps)*torch.softmax(self.net.pi_met,1) + eps
+        z_log_probs = torch.log(temp_orig.T).unsqueeze(1) + mvn_orig + \
+                Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met),
+                       torch.sqrt(torch.exp(self.net.sigma))).log_prob(true)
+        self.net.z_act = nn.functional.one_hot(torch.argmax(z_log_probs.sum(1),0),self.net.K)
+        loss_orig = -torch.logsumexp(z_log_probs, 0).sum(1).sum()
         return loss
 
     def alpha_loss(self):

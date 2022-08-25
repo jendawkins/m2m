@@ -84,7 +84,10 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
     path = path + '/' + info + '/'
     if not os.path.isdir(path):
-        os.mkdir(path)
+        try:
+            os.mkdir(path)
+        except:
+            pass
 
     # If function is called without input x and y data, generate synthetic data by calling data_gen.py and then plot
     if args.data == 'synthetic':
