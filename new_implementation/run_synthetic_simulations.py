@@ -1,7 +1,5 @@
 import argparse
 from torch_wrapper_objects import build_synthetic_datasets, run_training, LitM2M
-from evaluation import calculate_rsquared
-import pandas as pd
 
 ### running this file will store results in the `simulation_results` directory, 
 ### within a subdirectory that varies basaed on the simulation arguments
@@ -12,9 +10,7 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
-
-        
-def run_analysis(case, seed=0):
+def run_analysis(case):
     
     # from the case (as described in the overleaf), format the args for jen's code
     args = AttrDict({'N_met':case['J'], 
@@ -30,7 +26,7 @@ def run_analysis(case, seed=0):
                      })
     
     ## build datasets
-    train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args, seed=seed)
+    train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args)
     
     # format args into a directory name
     case_path = '_'.join( [a.replace('_', '-') + '-' + str(b) 
@@ -39,17 +35,13 @@ def run_analysis(case, seed=0):
     
     ## builds model, runs training, logs results
     fitted = run_training(train_dataset, 
-                          val_dataset, 
-                          gen_met_locs, 
-                          gen_bug_locs, 
-                          learning_rate=args.lr,
-                          logger_path=case_path,
-                          seed=seed
+                         val_dataset, 
+                         gen_met_locs, 
+                         gen_bug_locs, 
+                         learning_rate=args.lr,
+                         logger_path=case_path
                          )
-    
-    train_r2, val_r2 = calculate_rsquared(fitted, train_dataset, val_dataset)
-    
-    return(train_r2, val_r2, case_path)
+    return(fitted)
     
 def reload_data(checkpoint_path):
     case = {a[0]:int(a[1]) for a in [b.split('-') for b in checkpoint_path.split('/')[1].split('_')] }
@@ -97,21 +89,9 @@ def main():
                      'N':n,
                      'D':d} for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
     
-    all_cases=[]
-    all_train_r2s=[]
-    all_val_r2s=[]
-    
     for case in case_summaries:#[2:]
-        for seed in range(10):
-            train_r2, val_r2, case_path = run_analysis(case, seed=seed)
-
-            all_cases.append(case_path)
-            all_train_r2s.append(train_r2)
-            all_val_r2s.append(val_r2)
-        
-        pd.DataFrame({'Case':all_cases, 
-                      'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s}).to_csv('simulation_results/R2_summaries.csv')
+        run_analysis(case)
+    
     
 
 if __name__=='__main__':

@@ -40,19 +40,19 @@ class MAPloss():
         self.loss_dict['y'] = self.marginalized_loss(outputs, true)
 
         total_loss = 0
-        for name, parameter in [p for p in self.net.named_parameters()]:# + [ ['alpha', ''] ]:
-#             print(name)
-            if 'NAM' in name:
-#                 print('am here')
-                total_loss += self.NAM_loss(parameter)
-            elif 'batch' not in name:
-                name=name.replace('.', '_')
-                fun = getattr(self, name + '_loss')
-                fun()
+#         for name, parameter in [p for p in self.net.named_parameters()]:# + [ ['alpha', ''] ]:
+# #             print(name)
+#             if 'NAM' in name:
+# #                 print('am here')
+#                 total_loss += self.NAM_loss(parameter)
+#             elif 'batch' not in name:
+#                 name=name.replace('.', '_')
+#                 fun = getattr(self, name + '_loss')
+#                 fun()
                 
-#                     print(self.loss_dict[name])
-                total_loss += self.loss_dict[name]
-#                 except:
+# #                     print(self.loss_dict[name])
+#                 total_loss += self.loss_dict[name]
+# #                 except:
 #                     pass
         total_loss += self.loss_dict['y']
         return total_loss
@@ -64,6 +64,10 @@ class MAPloss():
 #         print('here')
 #         return( nn.functional.mse_loss(true, outputs ) )
         
+#         print('HEREREERERE')
+#         print(outputs.shape)
+#         print(true.shape)
+    
 #         Marginalized loss over z, the metabolic cluster indicator
         if self.net.met_locs is not None:
             eye = torch.eye(self.net.met_embedding_dim).unsqueeze(0).expand(self.net.K, -1, -1)
@@ -97,12 +101,15 @@ class MAPloss():
 #                Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), 
 #                       torch.sqrt(torch.exp(self.net.sigma))
 #                          ).log_prob(true) )
-
+        
+#         print( F.softmax(mvn.T) )
+        
+#         print( (outputs.transpose(1,2) * F.softmax(mvn.T).unsqueeze(0) ).sum(dim=-1).shape )
     
-        z_log_probs = torch.log(temp.T).unsqueeze(1) + mvn.unsqueeze(1) + \
-               Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), 
-                      torch.sqrt(torch.exp(self.net.sigma))
-                         ).log_prob(true)
+#         z_log_probs = torch.log(temp.T).unsqueeze(1) + mvn.unsqueeze(1) + \
+#                Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), 
+#                       torch.sqrt(torch.exp(self.net.sigma))
+#                          ).log_prob(true)
         
         
 #         z_log_probs = Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), torch.sqrt(torch.exp(self.net.sigma))).log_prob(true)
@@ -120,11 +127,11 @@ class MAPloss():
 #         print(F.softmax(mvn).T.unsqueeze(0).shape)
 #         print( (outputs.transpose(1,2) * F.softmax(mvn).T.unsqueeze(0) ).sum(-1).shape)
 #         raise(ValueError('stop'))
-#         loss = F.mse_loss(true, ( outputs.transpose(1,2) * F.softmax(mvn).T.unsqueeze(0) ).sum(-1) )
+        loss = F.mse_loss(true, ( outputs.transpose(1,2) * F.softmax(mvn.T).unsqueeze(0) ).sum(-1) )
 #         loss = F.mse_loss(true, outputs )#.T.unsqueeze(-1).expand(-1,-1,self.net.N_met) )
         
-        self.net.z_act = nn.functional.one_hot(torch.argmax(z_log_probs.sum(1),0),self.net.K)
-        loss = -torch.logsumexp(z_log_probs, 0).sum(1).sum()
+#         self.net.z_act = nn.functional.one_hot(torch.argmax(z_log_probs.sum(1),0),self.net.K)
+#         loss = -torch.logsumexp(z_log_probs, 0).sum(1).sum()
         return loss
 
     def alpha_loss(self):
@@ -211,11 +218,11 @@ class MAPloss():
         # Loss for NAM
         return -self.net.distributions['NAM'].log_prob(w).mean()
     
-#     def f_weight_loss(self):
-#         self.loss_dict['f_weight'] = self.net.f.weight.data.pow(2).sum()
+    def f_weight_loss(self):
+        self.loss_dict['f_weight'] = self.net.f.weight.data.pow(2).sum()
         
-#     def f_bias_loss(self):
-#         self.loss_dict['f_bias'] = self.net.f.bias.data.pow(2).sum()
+    def f_bias_loss(self):
+        self.loss_dict['f_bias'] = self.net.f.bias.data.pow(2).sum()
     
         
 

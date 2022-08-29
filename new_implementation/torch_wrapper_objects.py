@@ -15,11 +15,9 @@ from pytorch_lightning.loggers import TestTubeLogger
 
 import sys ## the key functions being used from the original codebase
 sys.path.append('jen_code/') 
-from model import Model
+sys.path.append('new_implementation/') 
+from model_newer import Model
 from synthetic_data_generation import generate_synthetic_data
-
-
-
 
 ### dataset functions
 
@@ -39,7 +37,7 @@ class m2mDataset(Dataset):
     def __getitem__(self, idx):
         return [self.x[idx], self.y[idx], self.g[idx]]
     
-def build_synthetic_datasets(args, val_size=500, return_all_info=False, seed=0):
+def build_synthetic_datasets(args, val_size=500, return_all_info=False):
     ## inputs the args, outputs the torch dataset objects, 
     ## and the summary params necessary for the model construction
     
@@ -56,8 +54,7 @@ def build_synthetic_datasets(args, val_size=500, return_all_info=False, seed=0):
                                            linear = False,# 1, #args.linear, jen: 'keep as 1'
                                            nl_type = 'linear',# args.nltype, # jen: use 'linear' 
                                            xdim=args.xdim, 
-                                           ydim = args.ydim, 
-                                           seed=seed
+                                           ydim = args.ydim
                                           )
 
     N=args.N_samples
@@ -174,8 +171,7 @@ def run_training(train_dataset,
                  gen_met_locs, 
                  gen_bug_locs, 
                  learning_rate,
-                 logger_path, 
-                 seed=0):
+                 logger_path):
     
 
     
@@ -187,11 +183,11 @@ def run_training(train_dataset,
                   learning_rate=learning_rate
                   )
     
-    litm2m.model.initialize(seed=seed, x= train_dataset.x, y=train_dataset.y)
+    litm2m.model.initialize(seed=0, x= train_dataset.x, y=train_dataset.y)
     
     # callback for model saving, checkpoints
     checkpoint_callback=ModelCheckpoint(
-                            dirpath = 'simulation_results',
+                            dirpath = 'simulation_results_new_implementation',
                             save_top_k=1,
                             verbose=False,
                             monitor='val_loss',
@@ -199,7 +195,7 @@ def run_training(train_dataset,
                             )
     
     # object to log model performance
-    tube_logger = TestTubeLogger('simulation_results', 
+    tube_logger = TestTubeLogger('simulation_results_new_implementation', 
                                   name=logger_path )#'test_tube_logger')
 
 
