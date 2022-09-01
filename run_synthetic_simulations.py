@@ -29,8 +29,15 @@ def run_analysis(case, seed=0):
                      'meas_var':0.1
                      })
     
-    ## build datasets
-    train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args, seed=seed)
+    generated_successfully=False
+    idx=0
+    while not generated_successfully:
+        try:
+            ## build datasets
+            train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args, seed=seed+idx*10)
+            generated_successfully=True
+        except:
+            idx+=1
     
     # format args into a directory name
     case_path = '_'.join( [a.replace('_', '-') + '-' + str(b) 
@@ -111,7 +118,7 @@ def main():
         
         pd.DataFrame({'Case':all_cases, 
                       'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s}).to_csv('simulation_results/R2_summaries.csv')
+                      'Val_r2':all_val_r2s}).to_csv('simulation_results/R2_summaries__.csv')
     
 
 if __name__=='__main__':

@@ -40,11 +40,18 @@ class Model(nn.Module):
                  microbe_locs, 
                  N_met, 
                  N_bug, 
-                 K = 2, 
-                 L = 3,
-                 alpha_temp = 1, omega_temp = 1, data_meas_var = 1,
-                 linear = True, learn_num_met_clusters = True, learn_num_bug_clusters = True,
-                p_nn = 1,met_class = None, bug_class = None):
+                 K = 25,#2
+                 L = 25,#3,
+                 alpha_temp = 1, 
+                 omega_temp = 1, 
+                 data_meas_var = 1,
+                 linear = False, #True, 
+                 learn_num_met_clusters = True, 
+                 learn_num_bug_clusters = True,
+                 p_nn = 1,
+                 met_class = None, 
+                 bug_class = None
+                ):
         super(Model, self).__init__()
         """
                 This function initializes the Model and calls the loss class
