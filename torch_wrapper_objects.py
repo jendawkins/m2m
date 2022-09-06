@@ -110,6 +110,9 @@ class LitM2M(pl.LightningModule):
         # set lr
         self.learning_rate = learning_rate
         
+        self.min_alpha_temp = np.power(10, -2.5)
+        self.min_omega_temp = np.power(10, -1.5)
+        
         
         # note to self -- at some point want to bring the loss function outside of the model object
         #      mainly because it would be good to separate the various components of the loss
@@ -140,7 +143,14 @@ class LitM2M(pl.LightningModule):
         self.log('loss', loss)
         return {'loss':loss}
     
-#     def on_after_backward(self):
+    def on_after_backward(self):
+        if self.model.alpha_temp > 0.05:
+            self.model.alpha_temp *= .975
+            
+        if self.model.omega_temp > 0.05:
+            self.model.omega_temp *= .975
+        
+        
 #         print('adjusting alpha')
 #         for p in self.model.parameters():
 #             p.data[torch.isnan(p.data)] = -1

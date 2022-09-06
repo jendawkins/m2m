@@ -108,8 +108,8 @@ def main():
     all_train_r2s=[]
     all_val_r2s=[]
     
-    for case in case_summaries:#[2:]
-        for seed in range(10):
+    for case in case_summaries[4:]:#[2:]
+        for seed in range(2):
             train_r2, val_r2, case_path = run_analysis(case, seed=seed)
 
             all_cases.append(case_path)
@@ -118,7 +118,7 @@ def main():
         
         pd.DataFrame({'Case':all_cases, 
                       'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s}).to_csv('simulation_results/R2_summaries__.csv')
+                      'Val_r2':all_val_r2s}).to_csv('simulation_results/R2_summaries_with_temp_annearlling.csv')
     
 
 if __name__=='__main__':
