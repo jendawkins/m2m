@@ -32,7 +32,7 @@ rm *.out
 
 # Please make a copy of this script for your own modifications
 
-#BSUB -q bigmem
+#BSUB -q normal
 #BSUB -M 80000
 #BSUB -R rusage[mem=80000]
 #BSUB -n 8
