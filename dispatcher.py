@@ -78,21 +78,27 @@ parser.add_argument("-case", "--case", help="case", type=str)
 args = parser.parse_args()
 
 
-
-param_dict = {('L', 'K'): [(3,3), (6,6)], 'seed': [0,1,2],
-              ('learn','priors'): [('all', 'all')],
-              #'fix': ['sigma',''],
-              'iter': 50000,
-              'w_tau': [(-0.3, -3)],
-              'a_tau': [(-0.3, -3)], 'gmm': [0],
-              'N_met': 20, 'N_bug': 15,
-              'N_samples': 1000,
-              'lr': [0.1,0.01, 0.001], 'meas_var': 0.108,
+param_dict = {('L', 'K', 'N_bug','N_met','N_samples','xdim','ydim'):
+                  [
+                   (2,2,40,40,int(100 + 0.2*100),2,2),
+                   (2,2,60,40,int(100 + 0.2*100),2,2),
+                   (3,3,200,800,int(100 + 0.2*100),2,2),
+                   (10,10,200,800,int(100 + 0.2*100),2,2),
+                   (10,10,200,800,int(200 + 0.2*200),2,2),
+                   (10,10,200,800,int(200+ 0.2*200),5,5),
+                   (10,10,200,800,int(200+ 0.2*200),10,10),
+                   (10,10,500,500,int(200+ 0.2*200),5,5)
+                  ],
+              'seed': np.arange(0,10),
+              'iter': 10000,
+              'lr': [0.001], 'meas_var': 0.10,
               'data': 'synthetic',
-              'load': 0, 'linear': 0, 'nltype': ['exp','sine','sigmoid'],
-              'hard': [0,1],
-              'lm': [0,1], 'lb': [0,1], 'adjust_lr': [1],
-              'locs': ['none']
+              'linear': 1, 'nltype': 'linear', 'w_tau': [(-0.1, -1.5)],
+              'a_tau': [(-0.1, -2.5)],
+              'adjust_lr': [1],
+              'lm': [0], 'lb': [0],
+              'locs': ['true'], 'early_stopping': [1],
+              # 'case': 'new_data_gen'
               }
 
 

@@ -17,6 +17,7 @@ from collections import Counter
 # from skbio.stats.ordination import pcoa
 # from skbio.stats.distance import DistanceMatrix
 import scipy
+from sklearn.metrics import r2_score
 
 def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
                   mu_bug, r_bug, mu_met, r_met, gen_u, gen_alpha, gen_beta):
@@ -163,7 +164,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
             continue
         ii += 1
     fig.tight_layout()
-    fig.savefig(path + '-sum_x_v_y.png')
+    fig.savefig(path + '/sum_x_v_y.png')
     plt.close(fig)
 
     # Metabolite levels for first 8 subjects
@@ -174,7 +175,7 @@ def plot_syn_data(path, x, y, g, gen_z, gen_bug_locs, gen_met_locs,
             ax[s].hist(y[s, ixs].flatten(), range=(y[s,:].min(), y[s,:].max()),
                         label='Cluster ' + str(i), alpha=0.5, bins=bins)
     fig.tight_layout()
-    fig.savefig(path + '-per_part_metabolites.png')
+    fig.savefig(path + '/per_part_metabolites.png')
     plt.close(fig)
 
 
@@ -273,7 +274,7 @@ def plot_posterior(param_dict, seed, out_path):
         ax.set_title(key + ', ' + str(len(param_dict[key])) + ' iterations')
         if not os.path.isdir(out_path + '/posteriors'):
             os.mkdir(out_path + '/posteriors')
-        fig.savefig(out_path + '/posteriors/' + str(seed) + '-' + key + '-posterior_dist.pdf')
+        fig.savefig(out_path + '/posteriors/' + key + '-posterior_dist.pdf')
 
 def plot_param_traces(path, param_dict, true_vals, fold):
     """
@@ -376,7 +377,7 @@ def plot_param_traces(path, param_dict, true_vals, fold):
         if not os.path.isdir(path + 'traces/'):
             os.mkdir(path + 'traces/')
         fig_dict[name].tight_layout()
-        fig_dict[name].savefig(path + 'traces/seed' + str(fold) + '_' + name + '_parameter_trace.png')
+        fig_dict[name].savefig(path + 'traces/' + name + '_parameter_trace.png')
         plt.close(fig_dict[name])
 
 def plot_locations(path, radii, means, locs, gps, name = 'bug'):
@@ -430,7 +431,7 @@ def plot_output_locations(path, net, best_mod, param_dict, fold, type = 'best', 
         ax.set_aspect('equal')
 
     fig.tight_layout()
-    fig.savefig(path + 'seed' + str(fold) + '-' + type + '-plot_zeros'*plot_zeros + '-bug_clusters.png')
+    fig.savefig(path + '-' + type + '-plot_zeros'*plot_zeros + '-bug_clusters.png')
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(5, 5))
@@ -455,7 +456,7 @@ def plot_output_locations(path, net, best_mod, param_dict, fold, type = 'best', 
         ax.set_aspect('equal')
 
     fig.tight_layout()
-    fig.savefig(path + 'seed' + str(fold) + '-' + type +'-plot_zeros'*plot_zeros + '-predicted_metab_clusters.png')
+    fig.savefig(path + '-' + type +'-plot_zeros'*plot_zeros + '-predicted_metab_clusters.png')
     plt.close(fig)
 
 def get_interactions_csv(path, best_mod, param_dict, seed):
@@ -473,7 +474,7 @@ def get_interactions_csv(path, best_mod, param_dict, seed):
         if (microbe, met) not in df.keys() and (met, microbe) not in df.keys():
             df[(microbe, met)] = best_alpha_beta[microbe, met]
 
-    pd.Series(df).to_csv(path + '/' + str(seed) + '-interactions.csv')
+    pd.Series(df).to_csv(path + '/interactions.csv')
 
 
 def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
@@ -534,11 +535,9 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
             fit_df[(j,i)]['intercept'] = lreg.intercept
 
             fit_df[(j,i)]['alpha'] = np.round(best_alpha[j, i],3)
-            if not os.path.isdir(path + '/seed' + str(seed)):
-                os.mkdir(path + '/seed' + str(seed))
             # if not os.path.isdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j)):
             #     os.mkdir(path + '/seed' + str(seed) + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j))
-            fig.savefig(path + '/seed' + str(seed)+ '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j) + '-sum_x_v_y.png')
+            fig.savefig(path + '/' + 'metclust' + str(i) + '_vs_' + 'microbeclust' + str(j) + '-sum_x_v_y.png')
             plt.close(fig)
             jj += 1
             try:
@@ -550,14 +549,14 @@ def plot_xvy(path, x, out_vec, best_mod, param_dict, seed):
         ii+=1
 
     try:
-        pd.DataFrame(fit_df).T.to_csv(path + 'seed' + str(seed) + '-fit.csv')
+        pd.DataFrame(fit_df).T.to_csv(path + '-fit.csv')
         df = pd.DataFrame(fit_df).T
-        if not os.path.isfile(path + 'rfit.txt'):
-            with open(path + 'rfit.txt', 'w') as f:
+        if not os.path.isfile('/'.join(path.split('/')[:-2]) + 'rfit.txt'):
+            with open('/'.join(path.split('/')[:-2]) + 'rfit.txt', 'w') as f:
                 f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
                         str(np.round(np.std(df['r-squared value']), 3)) + '\n')
         else:
-            with open(path + 'rfit.txt', 'a') as f:
+            with open('/'.join(path.split('/')[:-2]) + 'rfit.txt', 'a') as f:
                 f.write('Seed ' + str(seed) + ': ' + str(np.round(np.mean(df['r-squared value']), 3)) +  ' +- ' +
                         str(np.round(np.std(df['r-squared value']), 3)) + '\n')
     except:
@@ -589,11 +588,11 @@ def save_cluster_results(path, best_mod, true_vals,seed,
             ri = str(np.round(ri, 3))
         except:
             ri = 'NA'
-        if not os.path.isfile(path + 'nmi_ri.txt'):
+        if not os.path.isfile('/'.join(path.split('/')[:-2]) + 'nmi_ri.txt'):
             with open(path + 'nmi_ri.txt', 'w') as f:
                 f.write('Seed ' + str(seed) + ': NMI ' + str(nmi) + ', RI ' + ri + '\n')
         else:
-            with open(path + 'nmi_ri.txt', 'a') as f:
+            with open('/'.join(path.split('/')[:-2]) + 'nmi_ri.txt', 'a') as f:
                 f.write('Seed ' + str(seed) + ': NMI ' + str(nmi) + ', RI ' + ri + '\n')
 
     cluster_df = {}
@@ -605,20 +604,20 @@ def save_cluster_results(path, best_mod, true_vals,seed,
             cluster_df[cluster] = str(metabs[met_ids])
         else:
             cluster_df[cluster] = str(met_ids)
-    pd.Series(cluster_df).to_csv(path + 'seed' + str(seed) + '_metabolite_cluster_ids.csv')
+    pd.Series(cluster_df).to_csv(path + '_metabolite_cluster_ids.csv')
 
-    if os.path.isfile(path + 'number_of_met_clusters.txt'):
-        with open(path + 'number_of_met_clusters.txt', 'a') as f:
+    if os.path.isfile('/'.join(path.split('/')[:-2]) + 'number_of_met_clusters.txt'):
+        with open('/'.join(path.split('/')[:-2]) + 'number_of_met_clusters.txt', 'a') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(pred_z,0)>0)) + '\n')
     else:
-        with open(path + 'number_of_met_clusters.txt', 'w') as f:
+        with open('/'.join(path.split('/')[:-2]) + 'number_of_met_clusters.txt', 'w') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(pred_z,0)>0)) + '\n')
 
-    if os.path.isfile(path + 'number_of_bug_clusters.txt'):
-        with open(path + 'number_of_bug_clusters.txt', 'a') as f:
+    if os.path.isfile('/'.join(path.split('/')[:-2]) + 'number_of_bug_clusters.txt'):
+        with open('/'.join(path.split('/')[:-2]) + 'number_of_bug_clusters.txt', 'a') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(np.round(pred_w), 0) > 0)) + '\n')
     else:
-        with open(path + 'number_of_bug_clusters.txt', 'w') as f:
+        with open('/'.join(path.split('/')[:-2]) + 'number_of_bug_clusters.txt', 'w') as f:
             f.write('Seed ' + str(seed) + ': ' + str(np.sum(np.sum(np.round(pred_w), 0) > 0)) + '\n')
 
 
@@ -631,7 +630,7 @@ def save_cluster_results(path, best_mod, true_vals,seed,
             cluster_df[cluster] = str(seqs[met_ids])
         else:
             cluster_df[cluster] = str(met_ids)
-    pd.Series(cluster_df).to_csv(path +  'seed' + str(seed) + 'microbe_cluster_ids.csv')
+    pd.Series(cluster_df).to_csv(path + 'microbe_cluster_ids.csv')
 
 def plot_output(path, best_mod, out_vec, targets,
                 param_dict, fold, meas_var = 0.1):
@@ -648,6 +647,8 @@ def plot_output(path, best_mod, out_vec, targets,
     pred_z = param_dict['z'][best_mod]
     preds = torch.matmul(pred_clusters + meas_var*torch.randn(pred_clusters.shape), torch.Tensor(pred_z).T)
     pred_w = param_dict['w'][best_mod]
+
+    r2_out = r2_score(targets, preds.detach().numpy())
 
     # err = np.sum((preds.detach().numpy() - targets)**2,0)/preds.shape[0]
     # std_err = np.std(np.sqrt((preds.detach().numpy() - targets)**2),0)
@@ -711,12 +712,19 @@ def plot_output(path, best_mod, out_vec, targets,
 
     # RMSE_avg = np.round(np.mean(RMSE),4)
     # RMSE_std = np.round(np.std(RMSE),4)
-    if not os.path.isfile(path + 'NRMSE.txt'):
-        with open(path + 'NRMSE.txt', 'w') as f:
+    if not os.path.isfile('/'.join(path.split('/')[:-2]) + 'NRMSE.txt'):
+        with open('/'.join(path.split('/')[:-2]) + 'NRMSE.txt', 'w') as f:
             f.write('SEED ' + str(fold) + ' NRMSE: ' + str(N_RMSE_est) + '\n')
     else:
-        with open(path + 'NRMSE.txt', 'a') as f:
+        with open('/'.join(path.split('/')[:-2]) + 'NRMSE.txt', 'a') as f:
             f.write('SEED ' + str(fold) + ' NRMSE: ' + str(N_RMSE_est) + '\n')
+
+    if not os.path.isfile('/'.join(path.split('/')[:-2]) + 'R2.txt'):
+        with open('/'.join(path.split('/')[:-2]) + 'R2.txt', 'w') as f:
+            f.write('SEED ' + str(fold) + ' R2: ' + str(r2_out) + '\n')
+    else:
+        with open('/'.join(path.split('/')[:-2]) + 'R2.txt', 'a') as f:
+            f.write('SEED ' + str(fold) + ' R2: ' + str(r2_out) + '\n')
 
     # RMSE_df = pd.Series(RMSE, index = ['Metabolite ' + str(i) for i in range(len(RMSE))])
     # RMSE_df.to_csv(path + 'seed' + str(fold) + 'RMSE.csv')
@@ -751,7 +759,7 @@ def plot_loss_dict(path, fold, loss_dict):
             ax[i].set_yscale('log')
         except:
             continue
-    fig.savefig(path + 'seed' + str(fold) + '_loss_dict.png')
+    fig.savefig(path + 'loss_dict.png')
 
 
 # def plot_cluster_outputs_vs_met_value(best_z, y, cluster_outputs, path, seed = 0):

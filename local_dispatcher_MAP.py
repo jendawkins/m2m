@@ -18,16 +18,26 @@ args = parser.parse_args()
 
 max_load = args.max_load
 
-param_dict = {('L', 'K', 'lm', 'lb'): [(10,10,1,1)], ('L_true', 'K_true'): [(2,2)],
-              'seed': [0,1,2,3,4,5],
-              'iter': 20000,
+param_dict = {('L', 'K', 'N_bug','N_met','N_samples','xdim','ydim'):
+                  [
+                   (2,2,40,40,int(100 + 0.2*100),2,2),
+                   (2,2,60,40,int(100 + 0.2*100),2,2),
+                   (3,3,200,800,int(100 + 0.2*100),2,2),
+                   (10,10,200,800,int(100 + 0.2*100),2,2),
+                   (10,10,200,800,int(200 + 0.2*200),2,2),
+                   (10,10,200,800,int(200+ 0.2*200),5,5),
+                   (10,10,200,800,int(200+ 0.2*200),10,10),
+                   (10,10,500,500,int(200+ 0.2*200),5,5)
+                  ],
+              'seed': np.arange(0,10),
+              'iter': 10000,
               'lr': [0.001], 'meas_var': 0.10,
               'data': 'synthetic',
-              'linear': 0, 'nltype': 'poly', 'w_tau': [(-0.1, -1.5)],
+              'linear': 1, 'nltype': 'linear', 'w_tau': [(-0.1, -1.5)],
               'a_tau': [(-0.1, -2.5)],
               'adjust_lr': [1],
-              # 'lm': [1], 'lb': [1],
-              'locs': ['true'], 'N_met': 40, 'N_bug': 40,
+              'lm': [0], 'lb': [0],
+              'locs': ['true'], 'early_stopping': [0],
               # 'case': 'new_data_gen'
               }
 
