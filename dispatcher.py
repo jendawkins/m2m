@@ -33,8 +33,8 @@ rm *.out
 # Please make a copy of this script for your own modifications
 
 #BSUB -q normal
-#BSUB -M 80000
-#BSUB -R rusage[mem=80000]
+# BSUB -M 80000
+# BSUB -R rusage[mem=80000]
 #BSUB -n 8
 
 # Some important variables to check (Can be removed later)
