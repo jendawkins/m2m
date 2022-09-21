@@ -32,7 +32,7 @@ rm *.out
 
 # Please make a copy of this script for your own modifications
 
-#BSUB -q normal
+#BSUB -q gpu
 #BSUB -n 8
 
 # Some important variables to check (Can be removed later)
