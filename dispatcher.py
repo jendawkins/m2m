@@ -33,8 +33,6 @@ rm *.out
 # Please make a copy of this script for your own modifications
 
 #BSUB -q normal
-# BSUB -M 80000
-# BSUB -R rusage[mem=80000]
 #BSUB -n 8
 
 # Some important variables to check (Can be removed later)
@@ -93,7 +91,7 @@ param_dict = {('L', 'K', 'N_bug','N_met','N_samples','xdim','ydim'):
               'iter': 10000,
               'lr': [0.001], 'meas_var': 0.10,
               'data': 'synthetic',
-              'linear': 1, 'nltype': 'linear', 'w_tau': [(-0.1, -1.5)],
+              'linear': 0, 'nltype': ['exp','sine','poly','sigmoid'], 'w_tau': [(-0.1, -1.5)],
               'a_tau': [(-0.1, -2.5)],
               'adjust_lr': [1],
               'lm': [0], 'lb': [0],

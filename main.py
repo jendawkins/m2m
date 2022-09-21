@@ -307,12 +307,12 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             if epoch != last_epoch and (np.max(loss_vec[-100:]) - np.min(loss_vec[-100:])) <= 1:
                 last_epoch = epoch
 
-        if epoch % 10 == 0 or epoch == last_epoch and epoch > 1:
-            net.eval()
-            val_cluster_outputs, val_loss = net(x_val, y_val)
-            val_out_vec.append(val_cluster_outputs.detach().numpy())
-            val_loss_vec.append(val_loss.detach().numpy())
-            net.train()
+        # if epoch % 10 == 0 or epoch == last_epoch and epoch > 1:
+        # net.eval()
+        # val_cluster_outputs, val_loss = net(x_val, y_val)
+        # val_out_vec.append(val_cluster_outputs.detach().numpy())
+        # val_loss_vec.append(val_loss.detach().numpy())
+        # net.train()
         # at the last epoch, or at each 5000 epochs, plot results
         if epoch == last_epoch or (epoch % 5000 == 0 and epoch > 1):
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
@@ -341,95 +341,115 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 os.mkdir(train_path)
             if not os.path.isdir(test_path):
                 os.mkdir(test_path)
-            for best_mod, cur_path, out_vec, ids in zip([best_train_mod, best_train_mod], [train_path, test_path],
-                                                        [train_out_vec, val_out_vec], [tr_ids, val_ids]):
-                best_z = param_dict['z'][best_mod]
-                best_w = np.round(param_dict['w'][best_mod])
-                best_alpha = np.round(param_dict['alpha'][best_mod])
 
-                # Save interactions if linear
-                if args.linear == 1:
-                    get_interactions_csv(cur_path, best_mod, param_dict, args.seed)
+            best_mod = best_train_mod
+            cur_path = path
+            out_vec = train_out_vec
+            # for best_mod, cur_path, out_vec, ids in zip([best_train_mod, best_train_mod], [train_path, test_path],
+            #                                             [train_out_vec, val_out_vec], [tr_ids, val_ids]):
+            best_z = param_dict['z'][best_mod]
+            best_w = np.round(param_dict['w'][best_mod])
+            best_alpha = np.round(param_dict['alpha'][best_mod])
 
-                # save alpha and omega to see how close they are to one
-                pd.DataFrame(param_dict['alpha'][best_mod]).to_csv(cur_path + 'alpha.csv')
-                pd.DataFrame(param_dict['w'][best_mod]).to_csv(cur_path + 'omega.csv')
+            # Save interactions if linear
+            if args.linear == 1:
+                get_interactions_csv(cur_path, best_mod, param_dict, args.seed)
 
-                if args.data != 'synthetic':
-                    # Plot each learned cluster's phylogenetic tree and metabolic classification tree
-                    active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
-                        set(np.where(np.sum(best_alpha,1)!= 0)[0])))
-                    active_met_clust = np.where(np.sum(best_z,0) != 0)[0]
-                    asv_df = {}
-                    for asv_clust in active_asv_clust:
-                        asv_ix = np.where(best_w[:,asv_clust]!= 0)[0]
-                        if seqs is not None:
-                            asv_ix = seqs[asv_ix]
-                        asv_df['Cluster ' + str(asv_clust)] = asv_ix
-                        if not isinstance(asv_ix[0], str):
-                            asv_ix = [str(a) for a in asv_ix]
-                        if args.data == 'cdi':
-                            plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
-                                          out_path=cur_path + '-clusters/', data_path=base_path + '/inputs/' + args.data + '/',
-                                          taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree.pdf')
-                    if len(active_met_clust) > 20:
-                        active_met_clust = active_met_clust[:20]
-                    met_df = {}
-                    for met_clust in active_met_clust:
-                        met_ix = np.where(best_z[:, met_clust]!=0)[0]
-                        if metabs is not None:
-                            met_ix = metabs[met_ix]
-                        met_df['Cluster ' + str(met_clust)] = met_ix
-                        if not isinstance(met_ix[0], str):
-                            met_ix = [str(a) for a in met_ix]
-                        if args.data == 'cdi':
-                            plot_metab_tree(mets_keep=met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
-                                            out_path= cur_path+ '-clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree.pdf')
+            # save alpha and omega to see how close they are to one
+            pd.DataFrame(param_dict['alpha'][best_mod]).to_csv(cur_path + 'alpha.csv')
+            pd.DataFrame(param_dict['w'][best_mod]).to_csv(cur_path + 'omega.csv')
 
-                    temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
-                    temp.to_csv(cur_path +'mets_in_clusters.csv')
-                    temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in asv_df.items()]))
-                    temp.to_csv(cur_path +'asvs_in_clusters.csv')
+            if args.data != 'synthetic':
+                # Plot each learned cluster's phylogenetic tree and metabolic classification tree
+                active_asv_clust = list(set(np.where(np.sum(best_w,0) != 0)[0]).intersection(
+                    set(np.where(np.sum(best_alpha,1)!= 0)[0])))
+                active_met_clust = np.where(np.sum(best_z,0) != 0)[0]
+                asv_df = {}
+                for asv_clust in active_asv_clust:
+                    asv_ix = np.where(best_w[:,asv_clust]!= 0)[0]
+                    if seqs is not None:
+                        asv_ix = seqs[asv_ix]
+                    asv_df['Cluster ' + str(asv_clust)] = asv_ix
+                    if not isinstance(asv_ix[0], str):
+                        asv_ix = [str(a) for a in asv_ix]
+                    if args.data == 'cdi':
+                        plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+                                      out_path=cur_path + '-clusters/', data_path=base_path + '/inputs/' + args.data + '/',
+                                      taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree.pdf')
+                if len(active_met_clust) > 20:
+                    active_met_clust = active_met_clust[:20]
+                met_df = {}
+                for met_clust in active_met_clust:
+                    met_ix = np.where(best_z[:, met_clust]!=0)[0]
+                    if metabs is not None:
+                        met_ix = metabs[met_ix]
+                    met_df['Cluster ' + str(met_clust)] = met_ix
+                    if not isinstance(met_ix[0], str):
+                        met_ix = [str(a) for a in met_ix]
+                    if args.data == 'cdi':
+                        plot_metab_tree(mets_keep=met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
+                                        out_path= cur_path+ '-clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree.pdf')
 
-
-                # Save the lowest loss over the epochs to a text file
-                if not os.path.isfile(cur_path + 'Loss.txt'):
-                    with open(cur_path + 'Loss.txt', 'w') as f:
-                        f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec)) + '\n')
-                else:
-                    with open(cur_path + 'Loss.txt', 'a') as f:
-                        f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec))+ '\n')
+                temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
+                temp.to_csv(cur_path +'mets_in_clusters.csv')
+                temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in asv_df.items()]))
+                temp.to_csv(cur_path +'asvs_in_clusters.csv')
 
 
-                # Plot the loss per learned parameter
-                plot_loss_dict(cur_path, args.seed, loss_dict_vec)
+            # Save the lowest loss over the epochs to a text file
+            if not os.path.isfile(cur_path + 'Loss.txt'):
+                with open(cur_path + 'Loss.txt', 'w') as f:
+                    f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec)) + '\n')
+            else:
+                with open(cur_path + 'Loss.txt', 'a') as f:
+                    f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec))+ '\n')
 
-                # Plot scatterplots of the active microbial cluster outputs versus the active metabolic cluster outputs to
-                # see the relationship
-                xdict, ydict= plot_xvy(cur_path, x, out_vec, best_mod, param_dict, args.seed)
+            net.eval()
+            val_cluster_outputs, val_loss = net(x_val, y_val)
+            # val_out_vec.append(val_cluster_outputs.detach().numpy())
+            # val_loss_vec.append(val_loss.detach().numpy())
+            net.train()
 
-                # Plot parameter traces
-                if plot_params:
-                    plot_param_traces(cur_path, param_dict, true_vals, args.seed)
+            pred_clusters = val_cluster_outputs
+            preds = torch.matmul(pred_clusters + args.meas_var * torch.randn(pred_clusters.shape), torch.Tensor(best_z).T)
+            pd.DataFrame(preds.detach().numpy()).to_csv(path_orig + '/' + 'val_predictions.csv', header=False, index=True)
 
-                # plot loss
-                plot_loss(args.seed, loss_vec)
+            if not os.path.isfile(cur_path + 'ValLoss.txt'):
+                with open(cur_path + 'ValLoss.txt', 'w') as f:
+                    f.writelines('Seed ' + str(args.seed) + ', Current Val Loss: ' + str(val_loss.detach().item()) + '\n')
+            else:
+                with open(cur_path + 'Loss.txt', 'a') as f:
+                    f.writelines('Seed ' + str(args.seed) + ', Current Val Loss: ' + str(val_loss.detach().item())+ '\n')
 
-                # Plot posterior distribution histograms of each parameter
-                plot_posterior(param_dict, args.seed, cur_path)
+            # Plot the loss per learned parameter
+            plot_loss_dict(cur_path, args.seed, loss_dict_vec)
 
-                # Plot predicted metabolic values per the first 5 participants
-                plot_output(cur_path, best_mod, out_vec, np.array(y.detach().numpy()), param_dict,
-                                     args.seed, meas_var=args.meas_var)
+            # Plot scatterplots of the active microbial cluster outputs versus the active metabolic cluster outputs to
+            # see the relationship
+            xdict, ydict= plot_xvy(cur_path, x, out_vec, best_mod, param_dict, args.seed)
 
-                plot_annealing(cur_path, param_dict['w'], omega_tau_logspace, param_name='omega')
-                plot_annealing(cur_path, param_dict['alpha'], alpha_tau_logspace, param_name='alpha')
+            # Plot parameter traces
+            if plot_params:
+                plot_param_traces(cur_path, param_dict, true_vals, args.seed)
 
-                # save info about predicted metabolite clusters and microbe groups
-                save_cluster_results(cur_path, best_mod, true_vals, args.seed,
-                                     param_dict, metabs=metabs, seqs=seqs)
+            # plot loss
+            plot_loss(args.seed, loss_vec)
 
-                pd.DataFrame(out_vec[best_mod], index = ids).to_csv(cur_path + '/predictions.csv', index=True, header=False)
+            # Plot posterior distribution histograms of each parameter
+            plot_posterior(param_dict, args.seed, cur_path)
+
+            # Plot predicted metabolic values per the first 5 participants
+            plot_output(cur_path, best_mod, out_vec, np.array(y.detach().numpy()), param_dict,
+                                 args.seed, meas_var=args.meas_var)
+
+            plot_annealing(cur_path, param_dict['w'], omega_tau_logspace, param_name='omega')
+            plot_annealing(cur_path, param_dict['alpha'], alpha_tau_logspace, param_name='alpha')
+
+            # save info about predicted metabolite clusters and microbe groups
+            save_cluster_results(cur_path, best_mod, true_vals, args.seed,
+                                 param_dict, metabs=metabs, seqs=seqs)
+
+            # pd.DataFrame(train_out_vec[best_train_mod], index = ids).to_csv(cur_path + '/predictions.csv', index=True, header=False)
 
             # Save the model at this epoch
             save_dict = {'model_state_dict':net.state_dict(),
@@ -440,40 +460,42 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
             # Save the parameter dict, loss vector, microbial cluster sum for the model with the lowest loss, and
             # metabolite cluster outputs for the model with the lowest loss
-            if not os.path.isdir(path_orig + '/seed_{0}'.format(args.seed)):
-                os.mkdir(path_orig + '/seed_{0}'.format(args.seed))
+            # if not os.path.isdir(path_orig + '/seed_{0}'.format(args.seed)):
+            #     os.mkdir(path_orig + '/seed_{0}'.format(args.seed))
 
-            with open(path_orig +path_orig + '/seed_{0}'.format(args.seed)+ '/param_dict.pkl', 'wb') as f:
+            with open(path_orig + '/param_dict.pkl', 'wb') as f:
                 pkl.dump(param_dict, f)
-            with open(path_orig + path_orig + '/seed_{0}'.format(args.seed)+'/loss.pkl', 'wb') as f:
+            with open(path_orig +'/loss.pkl', 'wb') as f:
                 pkl.dump(loss_vec, f)
-            with open(path_orig + '/seed_{0}'.format(args.seed) + '/microbe_sum.pkl', 'wb') as f:
+            with open(path_orig+ '/microbe_sum.pkl', 'wb') as f:
                 pkl.dump(xdict, f)
-            with open(path_orig + '/seed_{0}'.format(args.seed) + '/met_clusters.pkl', 'wb') as f:
+            with open(path_orig + '/met_clusters.pkl', 'wb') as f:
                 pkl.dump(ydict, f)
 
             for key in param_dict.keys():
-                pd.DataFrame(param_dict[key][best_train_mod]).to_csv(path_orig + '/seed_{0}'.format(args.seed) + '/' + key + '.csv',
+                pd.DataFrame(param_dict[key][best_train_mod]).to_csv(path_orig + '/' + key + '.csv',
                                                      header=False, index=False)
 
-            x_tr, y_tr = pd.DataFrame(x.detach().numpy(), index = tr_ids), pd.Series(y.detach().numpy(), index = tr_ids)
-            x_tr.to_csv(path_orig + '/seed_{0}'.format(args.seed) + '/' + 'training_data.csv', header=False, index=True)
-            y_tr.to_csv(path_orig + '/seed_{0}'.format(args.seed) + '/' + 'training_labels.csv', header=False, index=True)
+            x_tr, y_tr = pd.DataFrame(x.detach().numpy(), index = tr_ids), pd.DataFrame(y.detach().numpy(), index = tr_ids)
+            x_tr.to_csv(path_orig+ '/' + 'training_data.csv', header=False, index=True)
+            y_tr.to_csv(path_orig + '/' + 'training_labels.csv', header=False, index=True)
 
-            x_val, y_val = pd.DataFrame(x_val.detach().numpy(), index = val_ids), pd.Series(y_val.detach().numpy(), index = val_ids)
-            x_val.to_csv(path_orig + '/seed_{0}'.format(args.seed) + '/' + 'training_data.csv', header=False, index=True)
-            y_val.to_csv(path_orig + '/seed_{0}'.format(args.seed) + '/' + 'training_labels.csv', header=False, index=True)
+            x_val, y_val = pd.DataFrame(x_val.detach().numpy(), index = val_ids), pd.DataFrame(y_val.detach().numpy(), index = val_ids)
+            x_val.to_csv(path_orig +  '/' + 'training_data.csv', header=False, index=True)
+            y_val.to_csv(path_orig  + '/' + 'training_labels.csv', header=False, index=True)
 
-            pred_clusters = out_vec[best_mod]
-            preds = torch.matmul(pred_clusters + meas_var * torch.randn(pred_clusters.shape), torch.Tensor(pred_z).T)
+            best_z = param_dict['z'][best_train_mod]
+            pred_clusters = train_out_vec[best_train_mod]
+            preds = torch.matmul(pred_clusters + args.meas_var * torch.randn(pred_clusters.shape), torch.Tensor(best_z).T)
+            pd.DataFrame(preds.detach().numpy()).to_csv(path_orig + '/' + 'train_predictions.csv', header=False, index=True)
 
             # Save the epoch per seed (needed when loading model)
-            with open(path_orig + 'seed' + str(args.seed) + '.txt', 'w') as f:
+            with open(path_orig +'.txt', 'w') as f:
                 f.writelines(str(epoch))
 
             # Save the time (in minutes) per epoch
             etime= time.time()
-            with open(path_orig + 'seed' + str(args.seed) + '_min_per_epoch.txt', 'w') as f:
+            with open(path_orig + '_min_per_epoch.txt', 'w') as f:
                 f.writelines(str(epoch) + ': ' + str(np.round((etime - stime)/60, 3)) + ' minutes')
 
             if epoch == last_epoch:
