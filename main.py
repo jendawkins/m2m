@@ -230,7 +230,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                             out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
 
     # If embedding dimension = 2 and we have embedded locations input, plot output locations
-    if a_met is not None and args.xdim == 2 and args.ydim == 2:
+    if a_met is not None:
         plot_output_locations(path + 'init_clusters_', net, 0, param_dict, args.seed, plot_zeros=1)
 
 
