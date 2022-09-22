@@ -308,11 +308,6 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 last_epoch = epoch
 
         # if epoch % 10 == 0 or epoch == last_epoch and epoch > 1:
-        # net.eval()
-        # val_cluster_outputs, val_loss = net(x_val, y_val)
-        # val_out_vec.append(val_cluster_outputs.detach().numpy())
-        # val_loss_vec.append(val_loss.detach().numpy())
-        # net.train()
         # at the last epoch, or at each 5000 epochs, plot results
         if epoch == last_epoch or (epoch % 5000 == 0 and epoch > 1):
             print('Epoch ' + str(epoch) + ' Loss: ' + str(loss_vec[-1]))
@@ -324,7 +319,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 path = path.split('epoch')[0] + 'epoch' + str(epoch) + '/'
             if not os.path.isdir(path):
                 os.mkdir(path)
-            if net.met_embedding_dim == 2 and net.bug_embedding_dim==2 and args.locs != 'none':
+            if args.locs != 'none':
                 plot_output_locations(path, net, -1, param_dict, args.seed,
                                       type='best_train', plot_zeros=False)
                 plot_output_locations(path, net, -1, param_dict, args.seed,
@@ -335,12 +330,12 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             best_train_mod = np.argmin(loss_vec)
             # best_val_mod = np.argmin(loss_vec)
 
-            train_path = path + '/train/'
-            test_path = path + '/test/'
-            if not os.path.isdir(train_path):
-                os.mkdir(train_path)
-            if not os.path.isdir(test_path):
-                os.mkdir(test_path)
+            # train_path = path + '/train/'
+            # test_path = path + '/test/'
+            # if not os.path.isdir(train_path):
+            #     os.mkdir(train_path)
+            # if not os.path.isdir(test_path):
+            #     os.mkdir(test_path)
 
             best_mod = best_train_mod
             cur_path = path
@@ -436,14 +431,14 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             plot_loss(args.seed, loss_vec)
 
             # Plot posterior distribution histograms of each parameter
-            plot_posterior(param_dict, args.seed, cur_path)
+            # plot_posterior(param_dict, args.seed, cur_path)
 
             # Plot predicted metabolic values per the first 5 participants
             plot_output(cur_path, best_mod, out_vec, np.array(y.detach().numpy()), param_dict,
                                  args.seed, meas_var=args.meas_var)
 
-            plot_annealing(cur_path, param_dict['w'], omega_tau_logspace, param_name='omega')
-            plot_annealing(cur_path, param_dict['alpha'], alpha_tau_logspace, param_name='alpha')
+            # plot_annealing(cur_path, param_dict['w'], omega_tau_logspace, param_name='omega')
+            # plot_annealing(cur_path, param_dict['alpha'], alpha_tau_logspace, param_name='alpha')
 
             # save info about predicted metabolite clusters and microbe groups
             save_cluster_results(cur_path, best_mod, true_vals, args.seed,
