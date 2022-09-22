@@ -176,7 +176,7 @@ class Model(nn.Module):
             # r_met is parameterized by a lognormal
             # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
             mu = np.log(loc)
-            var = np.log(scale)
+            var = scale
             self.distributions['r_met'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
             # self.distributions['r_met'] = HalfNormal(torch.tensor(10.0))
 
@@ -202,7 +202,7 @@ class Model(nn.Module):
 
             # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
             mu = np.log(loc)
-            var = np.log(scale)
+            var = scale
             self.distributions['r_bug'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
 
             # self.distributions['r_bug'] = HalfNormal(torch.tensor(10.0))
