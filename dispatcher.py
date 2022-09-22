@@ -32,7 +32,7 @@ rm *.out
 
 # Please make a copy of this script for your own modifications
 
-#BSUB -q short
+#BSUB -q normal
 # BSUB -n 4
 
 # Some important variables to check (Can be removed later)
@@ -94,7 +94,7 @@ param_dict = {('L', 'K', 'N_bug','N_met','N_samples','xdim','ydim'):
               'linear': 0, 'nltype': ['exp','sine','poly','sigmoid'], 'w_tau': [(-0.1, -1.5)],
               'a_tau': [(-0.1, -2.5)],
               'adjust_lr': [1],
-              'lm': [0], 'lb': [0],
+              'lm': [1], 'lb': [1],
               'locs': ['true'], 'early_stopping': [1],
               # 'case': 'new_data_gen'
               }

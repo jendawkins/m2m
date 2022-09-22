@@ -19,7 +19,7 @@ from model import *
 import datetime
 from ete_tree.tree_plotter import *
 from sklearn.model_selection import train_test_split
-
+import json
 
 
 def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_path = '', plot_params = True,
@@ -97,6 +97,8 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     if not os.path.isdir(path):
         os.mkdir(path)
 
+    with open(path + '/commandline_args.txt', 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
     # If function is called without input x and y data, generate synthetic data by calling data_gen.py and then plot
     if args.data == 'synthetic':
         x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
@@ -447,11 +449,11 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             # pd.DataFrame(train_out_vec[best_train_mod], index = ids).to_csv(cur_path + '/predictions.csv', index=True, header=False)
 
             # Save the model at this epoch
-            save_dict = {'model_state_dict':net.state_dict(),
-                       'optimizer_state_dict':optimizer.state_dict(),
-                       'epoch': epoch}
-            torch.save(save_dict,
-                       path_orig + '_checkpoint.tar')
+            # save_dict = {'model_state_dict':net.state_dict(),
+            #            'optimizer_state_dict':optimizer.state_dict(),
+            #            'epoch': epoch}
+            # torch.save(save_dict,
+            #            path_orig + '_checkpoint.tar')
 
             # Save the parameter dict, loss vector, microbial cluster sum for the model with the lowest loss, and
             # metabolite cluster outputs for the model with the lowest loss
@@ -521,8 +523,8 @@ if __name__ == "__main__":
                         default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
     parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 50)
     parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 30)
-    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 3)
-    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 4)
+    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 10)
+    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 10)
     parser.add_argument("-L_true", "--L_true", help="true number of microbe clusters "
                                                     "(for synthetic data generation)", type=int, default = 0)
     parser.add_argument("-K_true", "--K_true", help="true number of metab clusters "
@@ -530,8 +532,8 @@ if __name__ == "__main__":
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
     parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
     parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
-    parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 0)
-    parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 0)
+    parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 1)
+    parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 1)
     parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
     parser.add_argument("-linear", "--linear", type = int, default = 0, help = 'whether to run linear model or not')
     parser.add_argument("-nltype", "--nltype", type = str, default = "poly",
@@ -553,7 +555,7 @@ if __name__ == "__main__":
     parser.add_argument("-dtype", "--dtype", type=str, default='pubchem_tanimoto',
                         help = "which type of distance embedding to use, choices are:" 
                                " 'stratified', 'clumps', '', 'pubchem_tanimoto', 'RDK_tanimoto','MACCS_tanimoto' ")
-    parser.add_argument("-data", "--data", type = str, default = 'synthetic', help = "which input data to use; choices are: "
+    parser.add_argument("-data", "--data", type = str, default = 'cdi', help = "which input data to use; choices are: "
                                                                                "'cdi', 'safari', 'synthetic' ")
     parser.add_argument("-saf_type", "--saf_type", type=str, default='polar', help= 'if args.data == safari, which safari data type to run'
                                                                                     'options are: polar, lipids-neg, or lipids-pos')
