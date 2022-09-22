@@ -32,8 +32,8 @@ rm *.out
 
 # Please make a copy of this script for your own modifications
 
-#BSUB -q gpu
-#BSUB -n 8
+#BSUB -q short
+# BSUB -n 4
 
 # Some important variables to check (Can be removed later)
 echo '---PROCESS RESOURCE LIMITS---'
