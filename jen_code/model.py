@@ -383,14 +383,8 @@ class Model(nn.Module):
         # log-transform g with set epsilon
         g = torch.log(g + 0.001)
         bn = (g - torch.mean(g, 0)) / (torch.std(g, 0) + 1e-5)
-        # bn = self.batch_norm(g)
         self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
-#         print('beta:')
-#         print(self.beta.shape)
-#         print(self.beta)
-#         print(self.alpha_act)
-#         print(self.alpha_act.shape)
-#         print(bn.shape)
+
 
         if self.linear:
 #             out_clusters = self.beta[0,:] + torch.matmul(bn, self.beta[1:,:])*self.alpha_act

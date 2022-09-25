@@ -58,11 +58,6 @@ class MAPloss():
         return total_loss
 
     def marginalized_loss(self, outputs, true):
-#         print(true.shape)
-#         print(outputs.shape)
-#         print(nn.functional.mse_loss(true, outputs ))
-#         print('here')
-#         return( nn.functional.mse_loss(true, outputs ) )
         
 #         Marginalized loss over z, the metabolic cluster indicator
         if self.net.met_locs is not None:
@@ -80,48 +75,11 @@ class MAPloss():
         self.loss_dict['z'] = -mvn.sum()
         eps = 1e-10
         temp = (1-2*eps)*torch.softmax(self.net.pi_met,1) + eps
-        
-#         print('OUTPUT...')
-#         print(outputs.T.unsqueeze(-1))
-        
-#         print( outputs[:5], self.net.all_loss_mean )
-#         print(outputs.shape)
-#         print(mvn.shape)
-#         print( torch.log(temp.T).unsqueeze(1).shape )
-#         print(true.shape)
-#         print( Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), 
-#                       torch.sqrt(torch.exp(self.net.sigma))
-#                          ).log_prob(true).shape )
-        
-#         print( mvn + \
-#                Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), 
-#                       torch.sqrt(torch.exp(self.net.sigma))
-#                          ).log_prob(true) )
-
     
         z_log_probs = torch.log(temp.T).unsqueeze(1) + mvn.unsqueeze(1) + \
                Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), 
                       torch.sqrt(torch.exp(self.net.sigma))
                          ).log_prob(true)
-        
-        
-#         z_log_probs = Normal(outputs.T.unsqueeze(-1).expand(-1,-1,self.net.N_met), torch.sqrt(torch.exp(self.net.sigma))).log_prob(true)
-        
-#         print('LOSS')
-#         print(mvn.shape)
-#         print(temp.shape)
-#         print(outputs.shape)
-        
-#         print(true.shape)
-# #         print(  ( outputs.transpose(1,2)@temp.T ).squeeze(-1).shape )
-        
-        
-#         print(outputs.shape)
-#         print(F.softmax(mvn).T.unsqueeze(0).shape)
-#         print( (outputs.transpose(1,2) * F.softmax(mvn).T.unsqueeze(0) ).sum(-1).shape)
-#         raise(ValueError('stop'))
-#         loss = F.mse_loss(true, ( outputs.transpose(1,2) * F.softmax(mvn).T.unsqueeze(0) ).sum(-1) )
-#         loss = F.mse_loss(true, outputs )#.T.unsqueeze(-1).expand(-1,-1,self.net.N_met) )
         
         self.net.z_act = nn.functional.one_hot(torch.argmax(z_log_probs.sum(1),0),self.net.K)
         loss = -torch.logsumexp(z_log_probs, 0).sum(1).sum()
@@ -132,7 +90,6 @@ class MAPloss():
 #         self.net.alpha_temp
 #         Note that we compute the loss of alpha_act, which is the transformed version of alpha to be within 0 and 1
 #         (rather than the unconstrained net.alpha, which is what the model learns through gradient descent)
-#         print(self.net.alpha_act)
 
         self.loss_dict['alpha'] = -BinaryConcrete(self.net.alpha_loc, self.net.alpha_temp).log_prob(
                 self.net.alpha_act.T).sum().sum()

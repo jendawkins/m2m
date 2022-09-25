@@ -1,7 +1,7 @@
 import torch
 from torch.distributions import MultivariateNormal, Normal
 import torch.nn.functional as F
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error
 import numpy as np
 
 
@@ -27,14 +27,45 @@ def calculate_rsquared(fitted, train_dataset, val_dataset):
         fitted.model.mu_met.unsqueeze(1).expand(-1,fitted.model.N_met,-1),var.unsqueeze(1).expand(
             -1,fitted.model.N_met,-1,-1)).log_prob(
         torch.Tensor(fitted.model.met_locs)).unsqueeze(1)
-
-    inds = torch.Tensor( to_categorical( mvn.squeeze(1).argmax(dim=0), 
-                                         num_classes=mvn.shape[0]) 
-                        ).bool()
     
     ## run fitted models
     train_out = fitted.forward(train_dataset.x, train_dataset.y)[0]
     val_out = fitted.forward(val_dataset.x, val_dataset.y)[0]
+    
+    
+#     print( ( torch.log(temp.T).unsqueeze(1) + mvn + \
+#                     Normal( train_out.T.unsqueeze(-1).expand(-1,-1,fitted.model.N_met),
+#                                    torch.sqrt(torch.exp(fitted.model.sigma))  ).log_prob(train_dataset.y)\
+#            ).squeeze(1).argmax(dim=0).shape )
+    
+    
+#     print( (mvn).squeeze(1).argmax(dim=0).shape )
+    
+#     print(mvn.squeeze(1).shape)
+    
+#     print(torch.log(temp.T).shape) 
+    
+    
+#     print( Normal( train_out.T.unsqueeze(-1).expand(-1,-1,fitted.model.N_met),
+#                                    torch.sqrt(torch.exp(fitted.model.sigma))  ).log_prob(train_dataset.y).sum(dim=1).shape )
+    
+    inds = torch.Tensor( 
+            to_categorical(  
+                        ( torch.log(temp.T) + mvn.squeeze(1) + \
+                            Normal( train_out.T.unsqueeze(-1).expand(-1,-1,fitted.model.N_met),
+                                                   torch.sqrt(torch.exp(fitted.model.sigma))  
+                                          ).log_prob(train_dataset.y).sum(dim=1) ).argmax(dim=0), 
+                            num_classes=mvn.shape[0] ) 
+             ).bool()
+    
+    
+#     inds = torch.Tensor( to_categorical( 
+#                         torch.log(temp.T).unsqueeze(1) + mvn + \
+#                     Normal(train_out.T.unsqueeze(-1).expand(-1,-1,fitted.model.N_met),
+#                                    torch.sqrt(torch.exp(fitted.model.sigma))).log_prob(train_dataset.y)\
+#                                       .squeeze(1).argmax(dim=0), 
+#                                          num_classes=mvn.shape[0]) 
+#                         ).bool()
     
     
     ## obtain train + validation predictions
@@ -46,9 +77,12 @@ def calculate_rsquared(fitted, train_dataset, val_dataset):
     ## calculated rsquared
         
     train_r2 = r2_score(train_dataset.y.detach().numpy(), actual_train_preds.detach().numpy() )
-    val_r2 =  r2_score(train_dataset.y.detach().numpy(), actual_train_preds.detach().numpy() )
+    val_r2 =  r2_score(val_dataset.y.detach().numpy(), actual_preds.detach().numpy() )
     
-    return(train_r2, val_r2)
+    train_rmse = mean_squared_error(train_dataset.y.detach().numpy(), actual_train_preds.detach().numpy(), squared=False )
+    val_rmse =  mean_squared_error(val_dataset.y.detach().numpy(), actual_preds.detach().numpy(), squared=False )
+    
+    return(train_r2, val_r2, train_rmse, val_rmse)
                                    
                                    
 

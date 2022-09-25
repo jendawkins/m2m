@@ -34,7 +34,9 @@ def run_analysis(case, seed=0, return_model=False):
     while not generated_successfully:
         try:
             ## build datasets
-            train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args, seed=seed+idx*10)
+            train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args, 
+                                                                                              generation_tp='linear',
+                                                                                              seed=seed+idx*10)
             generated_successfully=True
         except:
             idx+=1
@@ -94,26 +96,27 @@ def main():
     
     # ordered lists of the different parametes for each case
     Ks = [2,2,2,3,10,10,10,10,20] # K: number of metabolite clusters
-    Ls = [2,2,2,3,10,10,10,10,10] # L: number of microbial clusters
-    Ms=[40,44,60,200,200,200,200,500,200] # M: number of microbial taxa
-    Js=[40,40,40,800,800,800,800,500,800] # J: number of metabolites
-    Ns=[100,100,100,200,200,200,200,200,200] # N: number of samples
-    Ds=[2,2,2,2,2,2,2,5,10] # D: embedding space
+    Ls = [10]*5 # L: number of microbial clusters
+    Ms=[200]*5 # M: number of microbial taxa
+    Js=[800]*5 # J: number of metabolites
+    Ns=[200]*5 # N: number of samples
+    Ds=[10]*5 # D: embedding space
     
     case_summaries=[{'K':k,
                      'L':l,
                      'M':m,
                      'J':j,
                      'N':n,
-                     'D':d} for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
+                     'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
     
     all_cases=[]
     all_train_r2s=[]
     all_val_r2s=[]
     
-    for case in case_summaries[4:]:#[2:]
-        for seed in range(2):
+    for case in case_summaries:
+        for seed in range(3):
             train_r2, val_r2, case_path = run_analysis(case, seed=seed)
+            
 
             all_cases.append(case_path)
             all_train_r2s.append(train_r2)
@@ -122,7 +125,7 @@ def main():
         pd.DataFrame({'Case':all_cases, 
                       'Train_r2':all_train_r2s, 
                       'Val_r2':all_val_r2s}).to_csv(\
-                                'simulation_results/R2_summaries_poly_fixed_generation.csv'
+                                'Tractability_Results/R2_summaries_varying_K.csv'
                                                    )
     
 

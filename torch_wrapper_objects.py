@@ -39,7 +39,11 @@ class m2mDataset(Dataset):
     def __getitem__(self, idx):
         return [self.x[idx], self.y[idx], self.g[idx]]
     
-def build_synthetic_datasets(args, val_size=500, return_all_info=False, seed=0):
+def build_synthetic_datasets(args, 
+                             val_size=500, 
+                             return_all_info=False, 
+                             generation_tp='poly',
+                             seed=0):
     ## inputs the args, outputs the torch dataset objects, 
     ## and the summary params necessary for the model construction
     
@@ -54,12 +58,13 @@ def build_synthetic_datasets(args, val_size=500, return_all_info=False, seed=0):
                                            N_bug_clusters = args.L,
                                            N_samples=args.N_samples + val_size, 
                                            linear = False,# 1, #args.linear, jen: 'keep as 1'
-                                           nl_type = 'linear',# args.nltype, # jen: use 'linear' 
+                                           nl_type =  generation_tp, #'linear', #'poly', #'linear',# args.nltype
+                                           measurement_var=args.noise_lvl,
                                            xdim=args.xdim, 
                                            ydim = args.ydim, 
                                            seed=seed
                                           )
-
+    
     N=args.N_samples
     # build dataloader object
     train_dataset=m2mDataset(x[:N], y[:N], g[:N])
@@ -79,7 +84,22 @@ def build_synthetic_datasets(args, val_size=500, return_all_info=False, seed=0):
                gen_bug_locs)
 
     
-
+# calculated from a fitted model 'm_out':
+# {p[0]:p[1].var().item() * 5e-2 if p[1].var()!=0 else 1e-2 for p in m_out.model.named_parameters() if 'NAM' not in p[0]}
+    
+lr_dict = {  'mu_bug': 0.056377047300338747,
+             'r_bug': 2.220627021789551,
+             'mu_met': 0.050776445865631105,
+             'r_met': 0.10957142114639283,
+             'e_met': 6.997507171035978e-07,
+             'pi_met': 0.1732098937034607,
+             'alpha': 0.17430464029312134,
+             'beta': 0.05287095904350281,
+             'batch_norm.weight': 0.01,
+             'batch_norm.bias': 0.01 
+          }
+    
+    
 ### Model/training functions
     
 class LitM2M(pl.LightningModule):
@@ -173,6 +193,12 @@ class LitM2M(pl.LightningModule):
     def configure_optimizers(self):
         # doing rmsprop to match jen's code, 
         # for now I'm not adding the 'adjust lr by parameter size' approach
+        
+#         return(torch.optim.RMSprop([ {'params':[ p[1] ], 
+#                                       'lr': [lr_dict[p[0]]*1e-1 if p[0] in lr_dict else self.learning_rate][0] 
+#                                      }
+#                                       for p in self.model.named_parameters() ] ) )
+        
         return torch.optim.RMSprop(self.model.parameters(), lr=self.learning_rate, weight_decay=0)
         # return torch.optim.SGD(self.model.parameters(), lr=self.learning_rate, weight_decay=0)
     
@@ -197,7 +223,7 @@ def run_training(train_dataset,
                   learning_rate=learning_rate
                   )
     
-    litm2m.model.initialize(seed=seed, x= train_dataset.x, y=train_dataset.y)
+    litm2m.model.initialize(seed=seed, x=train_dataset.x, y=train_dataset.y)
     
     # callback for model saving, checkpoints
     checkpoint_callback=ModelCheckpoint(
@@ -214,8 +240,8 @@ def run_training(train_dataset,
 
 
     # object ot train the model
-    trainer = pl.Trainer(max_epochs = 5000,
-                         min_epochs=25,#500,
+    trainer = pl.Trainer(max_epochs = 500, #5000,
+                         min_epochs=10, #25,#500,
                          logger=tube_logger,
                          gpus = int( torch.cuda.is_available() ),
     #                      progress_bar_refresh_rate=0,

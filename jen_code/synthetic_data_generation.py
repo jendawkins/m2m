@@ -1,5 +1,6 @@
 from helper import *
 from plot_helper import *
+from scipy.stats import zscore
 
 def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clusters = 2, N_bug_clusters = 2,
                             seed = 0, measurement_var=0.1, xdim = 2, ydim = 2, p = 0.5, linear = False,
@@ -34,6 +35,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
     temp = st.norm(np.log(r_met_desired),0.1).rvs(N_met_clusters)
     r_met = np.exp(temp)
     z_id = st.multinomial(1, pi_met).rvs(N_met)
+    
     met_locs = np.zeros((N_met, ydim))
     for clusters in range(N_met_clusters):
         cluster_id = np.where(z_id[:, clusters] == 1)[0]
@@ -44,6 +46,16 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
 
     alpha = st.bernoulli(p).rvs((N_bug_clusters, N_met_clusters))
 
+#     flip_clust_pairs=True
+#     if flip_clust_pairs:
+#         cluster_pairs = np.random.choice(range(N_met_clusters), N_met_clusters, replace=False)\
+#                                 .reshape(N_met_clusters//2, 2)
+
+#         for q in cluster_pairs:
+#             for w in range(2):
+#                 clust_inds = np.where( z_id.argmax(axis=1)==q[w])[0]
+#                 z_id[ np.random.choice( clust_inds, clust_inds.shape[0]//2 ), 
+#                          ] = np.eye(N_met_clusters)[q[(w+1)%2]]
 
     a = st.uniform(10,100).rvs()
     g = np.zeros((N_samples, N_bug_clusters))
@@ -95,12 +107,15 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
             if nl_type == 'sin':
                 y[:, j] = np.random.normal(beta[0, k] + np.sin(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'poly':
-                y[:,j] = np.random.normal(beta[0, k] + (g_temp)**5 @ (beta[1:, k] * alpha[:, k]) - (g)**4 @ (
-                        beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+                y[:,j] = np.random.normal(beta[0, k] + (g_temp)**3 @ (beta[1:, k] * alpha[:, k] )\
+                        - (g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'linear':
                 y[:, j] = np.random.normal(beta[0, k] + g_temp @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
         else:
             y[:, j] = np.random.normal(beta[0, k] + g_temp @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+            
+    if nl_type=='poly':
+        y = zscore(y)*2
 
     return X, y, g, beta, alpha, w_one_hot, z_id, bug_locs, met_locs, mu_bug, mu_met, r_bug, r_met
 
