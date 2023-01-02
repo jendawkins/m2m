@@ -107,7 +107,7 @@ def main():
                      'L':l,
                      'M':m,
                      'J':j,
-                     'N':n,
+                     'N':int(n * 1.25),
                      'D':d,
                      'noise_lvl':noise
                     } for k,l,m,j,n,d,noise in zip(Ks, Ls, Ms, Js, Ns, Ds, noises)]
@@ -120,14 +120,15 @@ def main():
     
     for case in case_summaries:
         for seed in range(2):
-            train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
+            train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, 
+                                                                             seed=seed )
             
 
             all_cases.append(case_path)
             all_train_r2s.append(train_r2)
             all_val_r2s.append(val_r2)
-            all_train_rmses.append(train_rmses)
-            all_val_rmses.appednd(val_rmses)
+            all_train_rmses.append(train_rmse)
+            all_val_rmses.append(val_rmse)
         
         pd.DataFrame({'Case':all_cases, 
                       'Train_r2':all_train_r2s, 

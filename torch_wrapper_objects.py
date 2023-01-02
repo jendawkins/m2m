@@ -57,7 +57,7 @@ def build_synthetic_datasets(args,
                                            N_met_clusters = args.K,
                                            N_bug_clusters = args.L,
                                            N_samples=args.N_samples + val_size, 
-                                           linear = False,# 1, #args.linear, jen: 'keep as 1'
+                                           linear = True,# False,# 1, #args.linear, jen: 'keep as 1'
                                            nl_type =  generation_tp, #'linear', #'poly', #'linear',# args.nltype
                                            measurement_var=args.noise_lvl,
                                            xdim=args.xdim, 
@@ -109,7 +109,9 @@ class LitM2M(pl.LightningModule):
                  train_dataset,
                  val_dataset, 
                  batch_size=100, 
-                 learning_rate=1e-2
+                 learning_rate=1e-2, 
+                 nl=25,
+                 nk=25
                 ):
         super().__init__()
          
@@ -122,7 +124,10 @@ class LitM2M(pl.LightningModule):
         self.model=Model(gen_met_locs, 
                          gen_bug_locs, 
                          gen_met_locs.shape[0],
-                         gen_bug_locs.shape[0]
+                         gen_bug_locs.shape[0], 
+                         L=nl,
+                         K=nk, 
+#                          linear=True
                          )
         
         self.model.all_loss_mean=train_dataset.y.mean()
@@ -164,11 +169,11 @@ class LitM2M(pl.LightningModule):
         return {'loss':loss}
     
     def on_after_backward(self):
-        if self.model.alpha_temp > 0.05:
-            self.model.alpha_temp *= .975
+        if self.model.alpha_temp > 0.01:#0.05:
+            self.model.alpha_temp *= .95
             
-        if self.model.omega_temp > 0.05:
-            self.model.omega_temp *= .975
+        if self.model.omega_temp > 0.01:#0.05:
+            self.model.omega_temp *= .95
         
         
 #         print('adjusting alpha')
@@ -211,7 +216,12 @@ def run_training(train_dataset,
                  gen_bug_locs, 
                  learning_rate,
                  logger_path, 
-                 seed=0):
+                 seed=0, 
+                 n_l=25, 
+                 n_k=25, 
+                 batch_size=100, 
+                 max_epochs=500, 
+                 min_epochs=10):
     
 
     
@@ -220,7 +230,10 @@ def run_training(train_dataset,
                   gen_bug_locs, 
                   train_dataset, 
                   val_dataset, 
-                  learning_rate=learning_rate
+                  learning_rate=learning_rate, 
+                  nl=n_l,
+                  nk=n_k, 
+                  batch_size=batch_size
                   )
     
     litm2m.model.initialize(seed=seed, x=train_dataset.x, y=train_dataset.y)
@@ -240,15 +253,15 @@ def run_training(train_dataset,
 
 
     # object ot train the model
-    trainer = pl.Trainer(max_epochs = 500, #5000,
-                         min_epochs=10, #25,#500,
+    trainer = pl.Trainer(max_epochs = max_epochs, #5000,
+                         min_epochs=min_epochs, #25,#500,
                          logger=tube_logger,
                          gpus = int( torch.cuda.is_available() ),
     #                      progress_bar_refresh_rate=0,
                          weights_summary='full',
                          check_val_every_n_epoch=1,
                          checkpoint_callback=checkpoint_callback,
-                        callbacks=[EarlyStopping(monitor='val_loss', patience=5)]
+                        callbacks=[EarlyStopping(monitor='val_loss', patience=2)]
                         )
     
     

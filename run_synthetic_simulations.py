@@ -26,7 +26,7 @@ def run_analysis(case, seed=0, return_model=False):
                      'K':case['K'], ### this is fed into inits
                      'L':case['L'], 
                      'lr':1e-2,#0.01,
-                     'meas_var':0.1
+                     'noise_lvl':0.1
                      })
     
     generated_successfully=False
@@ -54,12 +54,12 @@ def run_analysis(case, seed=0, return_model=False):
                           seed=seed
                          )
     
-    train_r2, val_r2 = calculate_rsquared(fitted, train_dataset, val_dataset)
+    train_r2, val_r2, train_rmse, val_rmse = calculate_rsquared(fitted, train_dataset, val_dataset)
     
     if return_model:
         return(train_r2, val_r2, case_path, fitted)
     else:
-        return(train_r2, val_r2, case_path)
+        return(train_r2, val_r2, train_rmse, val_rmse, case_path)
     
 def reload_data(checkpoint_path):
     case = {a[0]:int(a[1]) for a in [b.split('-') for b in checkpoint_path.split('/')[1].split('_')] }
@@ -110,19 +110,26 @@ def main():
     all_cases=[]
     all_train_r2s=[]
     all_val_r2s=[]
+    all_train_rmses=[]
+    all_val_rmses=[]
     
     for case in case_summaries[4:]:#[2:]
         for seed in range(2):
-            train_r2, val_r2, case_path = run_analysis(case, seed=seed)
+            train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
 
             all_cases.append(case_path)
             all_train_r2s.append(train_r2)
             all_val_r2s.append(val_r2)
+            all_train_rmses.append(train_rmse)
+            all_val_rmses.append(val_rmse)
         
         pd.DataFrame({'Case':all_cases, 
                       'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s}).to_csv(\
-                                'simulation_results/R2_summaries_poly_fixed_generation.csv'
+                      'Val_r2':all_val_r2s, 
+                     'Train_rmse': all_train_rmses,
+                     'Val_rmse': all_val_rmses
+                     }).to_csv(\
+                                'simulation_results/R2_summaries_poly_fixed_generation_927.csv'
                                                    )
     
 

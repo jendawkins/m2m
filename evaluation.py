@@ -5,15 +5,14 @@ from sklearn.metrics import r2_score, mean_squared_error
 import numpy as np
 
 
-
-
-
 def to_categorical(y, num_classes):
     """ 1-hot encodes a tensor """
     return np.eye(num_classes, dtype='uint8')[y]
 
 
-def calculate_rsquared(fitted, train_dataset, val_dataset):
+def calculate_rsquared(fitted, train_dataset, val_dataset, return_inds = False):
+    
+    fitted=fitted.eval()
     
     ## calculate necessary components for preds
     eps = 1e-10
@@ -76,13 +75,16 @@ def calculate_rsquared(fitted, train_dataset, val_dataset):
                                        .transpose(0,2).transpose(0,1)[:, inds]
     ## calculated rsquared
         
-    train_r2 = r2_score(train_dataset.y.detach().numpy(), actual_train_preds.detach().numpy() )
-    val_r2 =  r2_score(val_dataset.y.detach().numpy(), actual_preds.detach().numpy() )
+    train_r2 = r2_score(train_dataset.y.flatten().detach().numpy(), actual_train_preds.flatten().detach().numpy() )
+    val_r2 =  r2_score(val_dataset.y.flatten().detach().numpy(), actual_preds.flatten().detach().numpy() )
     
-    train_rmse = mean_squared_error(train_dataset.y.detach().numpy(), actual_train_preds.detach().numpy(), squared=False )
-    val_rmse =  mean_squared_error(val_dataset.y.detach().numpy(), actual_preds.detach().numpy(), squared=False )
+    train_rmse = mean_squared_error(train_dataset.y.flatten().detach().numpy(), actual_train_preds.flatten().detach().numpy(), squared=False )
+    val_rmse =  mean_squared_error(val_dataset.y.flatten().detach().numpy(), actual_preds.flatten().detach().numpy(), squared=False )
     
-    return(train_r2, val_r2, train_rmse, val_rmse)
+    if return_inds:
+        return(train_r2, val_r2, train_rmse, val_rmse, inds)
+    else:
+        return(train_r2, val_r2, train_rmse, val_rmse)
                                    
                                    
 

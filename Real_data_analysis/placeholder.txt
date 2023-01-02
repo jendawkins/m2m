@@ -1,0 +1,2 @@
+
+this directory contians a bunch of jupyter notebooks and code for running the cdiff anaylsis. for the sake of the github branch's efficiency, i'm not pushing all of the notebooks

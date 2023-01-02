@@ -35,12 +35,10 @@ def run_analysis(case, seed=0, return_model=False):
         try:
             ## build datasets
             train_dataset, val_dataset, gen_met_locs, gen_bug_locs = build_synthetic_datasets(args, 
-                                                                                              generation_tp='linear',
-                                                                                              seed=seed+idx*10)
+                                                                                              seed=seed+idx*10, 
+                                                                                              generation_tp='sin')
             generated_successfully=True
         except:
-            if idx>250:
-                raise(ValueError('Failed to generate data'))
             idx+=1
             seed+=1
     
@@ -56,9 +54,7 @@ def run_analysis(case, seed=0, return_model=False):
                           gen_bug_locs, 
                           learning_rate=args.lr,
                           logger_path=case_path,
-                          seed=seed,
-                          n_k = args.K+20,
-                          n_l = args.L+20
+                          seed=seed
                          )
     
     train_r2, val_r2, train_rmse, val_rmse = calculate_rsquared(fitted, train_dataset, val_dataset)
@@ -99,108 +95,20 @@ def reload_data(checkpoint_path):
 def main():
     # runs the simulations for all cases outlined in the overleaf scenarios
     
-#     ### Varying K
-    
-#     # ordered lists of the different parametes for each case
-#     Ks = [2, 3, 5, 10, 20] # K: number of metabolite clusters
-#     Ls = [10]*5 # L: number of microbial clusters
-#     Ms=[200]*5 # M: number of microbial taxa
-#     Js=[800]*5 # J: number of metabolites
-#     Ns=[200]*5 # N: number of samples
-#     Ds=[10]*5 # D: embedding space
-    
-#     case_summaries=[{'K':k,
-#                      'L':l,
-#                      'M':m,
-#                      'J':j,
-#                      'N':n,
-#                      'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
-    
-#     all_cases=[]
-#     all_train_r2s=[]
-#     all_val_r2s=[]
-#     all_train_rmses=[]
-#     all_val_rmses=[]
-    
-#     for case in case_summaries:
-#         for seed in range(2):
-#             train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
-            
-
-#             all_cases.append(case_path)
-#             all_train_r2s.append(train_r2)
-#             all_val_r2s.append(val_r2)
-#             all_train_rmses.append(train_rmse)
-#             all_val_rmses.append(val_rmse)
-        
-#         pd.DataFrame({'Case':all_cases, 
-#                       'Train_r2':all_train_r2s, 
-#                       'Val_r2':all_val_r2s,
-#                       'Train_rmse':all_train_rmses,
-#                       'Val_rmse':all_val_rmses
-#                      }).to_csv(\
-#                                 'Tractability_Results/R2_summaries_varying_K.csv'
-#                                                    )
-        
-#     ### Varying L
-        
-#     # ordered lists of the different parametes for each case
-#     Ks = [10]*5 # K: number of metabolite clusters
-#     Ls = [2, 3, 5, 10, 20] # L: number of microbial clusters
-#     Ms=[200]*5 # M: number of microbial taxa
-#     Js=[800]*5 # J: number of metabolites
-#     Ns=[200]*5 # N: number of samples
-#     Ds=[10]*5 # D: embedding space
-    
-#     case_summaries=[{'K':k,
-#                      'L':l,
-#                      'M':m,
-#                      'J':j,
-#                      'N':n,
-#                      'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
-    
-#     all_cases=[]
-#     all_train_r2s=[]
-#     all_val_r2s=[]
-#     all_train_rmses=[]
-#     all_val_rmses=[]
-    
-#     for case in case_summaries:
-#         for seed in range(2):
-#             train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
-            
-
-#             all_cases.append(case_path)
-#             all_train_r2s.append(train_r2)
-#             all_val_r2s.append(val_r2)
-#             all_train_rmses.append(train_rmse)
-#             all_val_rmses.append(val_rmse)
-        
-#         pd.DataFrame({'Case':all_cases, 
-#                       'Train_r2':all_train_r2s, 
-#                       'Val_r2':all_val_r2s,
-#                       'Train_rmse':all_train_rmses,
-#                       'Val_rmse':all_val_rmses
-#                      }).to_csv(\
-#                                 'Tractability_Results/R2_summaries_varying_L.csv')
-        
-        
-    ### Varying M
-    
     # ordered lists of the different parametes for each case
-    Ks = [10]*5 # K: number of metabolite clusters
-    Ls = [10]*5 # L: number of microbial clusters
-    Ms=[35, 50, 100, 200, 800] # M: number of microbial taxa
-    Js=[200]*5 # J: number of metabolites
-    Ns=[200]*5 # N: number of samples
-    Ds=[10]*5 # D: embedding space
+    Ks = [2,2,2,3,10,10,10,10,20] # K: number of metabolite clusters
+    Ls = [2,2,2,3,10,10,10,10,10] # L: number of microbial clusters
+    Ms=[40,44,60,200,200,200,200,500,200] # M: number of microbial taxa
+    Js=[40,40,40,800,800,800,800,500,800] # J: number of metabolites
+    Ns=[100,100,100,200,200,200,200,200,200] # N: number of samples
+    Ds=[2,2,2,2,2,2,2,5,10] # D: embedding space
     
     case_summaries=[{'K':k,
                      'L':l,
                      'M':m,
                      'J':j,
                      'N':n,
-                     'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
+                     'D':d} for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
     
     all_cases=[]
     all_train_r2s=[]
@@ -208,11 +116,9 @@ def main():
     all_train_rmses=[]
     all_val_rmses=[]
     
-    for case in case_summaries:
+    for case in case_summaries[4:]:#[2:]
         for seed in range(2):
             train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
-            print( train_r2, val_r2, train_rmse, val_rmse, case_path )
-            return(None)
 
             all_cases.append(case_path)
             all_train_r2s.append(train_r2)
@@ -222,145 +128,12 @@ def main():
         
         pd.DataFrame({'Case':all_cases, 
                       'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s,
-                      'Train_rmse':all_train_rmses,
-                      'Val_rmse':all_val_rmses
+                      'Val_r2':all_val_r2s, 
+                     'Train_rmse': all_train_rmses,
+                     'Val_rmse': all_val_rmses
                      }).to_csv(\
-                                'Tractability_Results/R2_summaries_varying_M.csv'
+                                'simulation_results_sine/R2_summaries_sin_10-6.csv'
                                                    )
-        
-    ### Varying J
-        
-    # ordered lists of the different parametes for each case
-    Ks = [10]*5 # K: number of metabolite clusters
-    Ls = [10]*5 # L: number of microbial clusters
-    Ms=[200]*5 # M: number of microbial taxa
-    Js=[35, 50, 100, 200, 800] # J: number of metabolites
-    Ns=[200]*5 # N: number of samples
-    Ds=[10]*5 # D: embedding space
-    
-    case_summaries=[{'K':k,
-                     'L':l,
-                     'M':m,
-                     'J':j,
-                     'N':n,
-                     'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
-    
-    all_cases=[]
-    all_train_r2s=[]
-    all_val_r2s=[]
-    all_train_rmses=[]
-    all_val_rmses=[]
-    
-    for case in case_summaries:
-        for seed in range(2):
-            train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
-            
-
-            all_cases.append(case_path)
-            all_train_r2s.append(train_r2)
-            all_val_r2s.append(val_r2)
-            all_train_rmses.append(train_rmse)
-            all_val_rmses.append(val_rmse)
-        
-        pd.DataFrame({'Case':all_cases, 
-                      'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s,
-                      'Train_rmse':all_train_rmses,
-                      'Val_rmse':all_val_rmses
-                     }).to_csv(\
-                                'Tractability_Results/R2_summaries_varying_J.csv'
-                                                   )
-        
-        
-    ### Varying N 
-        
-    # ordered lists of the different parametes for each case
-    Ks = [10]*5 # K: number of metabolite clusters
-    Ls = [10]*5 # L: number of microbial clusters
-    Ms=[200]*5 # M: number of microbial taxa
-    Js=[800]*5 # J: number of metabolites
-    Ns=[35, 50, 100, 200, 1000]*5 # N: number of samples
-    Ds=[10]*5 # D: embedding space
-    
-    case_summaries=[{'K':k,
-                     'L':l,
-                     'M':m,
-                     'J':j,
-                     'N':n,
-                     'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
-    
-    all_cases=[]
-    all_train_r2s=[]
-    all_val_r2s=[]
-    all_train_rmses=[]
-    all_val_rmses=[]
-    
-    for case in case_summaries:
-        for seed in range(2):
-            train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
-            
-
-            all_cases.append(case_path)
-            all_train_r2s.append(train_r2)
-            all_val_r2s.append(val_r2)
-            all_train_rmses.append(train_rmse)
-            all_val_rmses.append(val_rmse)
-        
-        pd.DataFrame({'Case':all_cases, 
-                      'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s,
-                      'Train_rmse':all_train_rmses,
-                      'Val_rmse':all_val_rmses
-                     }).to_csv(\
-                                'Tractability_Results/R2_summaries_varying_N.csv'
-                                                   )
-        
-        
-        
-    ### Varying D 
-        
-    # ordered lists of the different parametes for each case
-    Ks = [10]*5 # K: number of metabolite clusters
-    Ls = [10]*5 # L: number of microbial clusters
-    Ms=[200]*5 # M: number of microbial taxa
-    Js=[800]*5 # J: number of metabolites
-    Ns=[10]*5 # N: number of samples
-    Ds=[2, 5, 20, 100, 500] # D: embedding space
-    
-    case_summaries=[{'K':k,
-                     'L':l,
-                     'M':m,
-                     'J':j,
-                     'N':n,
-                     'D':d } for k,l,m,j,n,d in zip(Ks, Ls, Ms, Js, Ns, Ds)]
-    
-    all_cases=[]
-    all_train_r2s=[]
-    all_val_r2s=[]
-    all_train_rmses=[]
-    all_val_rmses=[]
-    
-    for case in case_summaries:
-        for seed in range(2):
-            train_r2, val_r2, train_rmse, val_rmse, case_path = run_analysis(case, seed=seed)
-            
-
-            all_cases.append(case_path)
-            all_train_r2s.append(train_r2)
-            all_val_r2s.append(val_r2)
-            all_train_rmses.append(train_rmse)
-            all_val_rmses.append(val_rmse)
-        
-        pd.DataFrame({'Case':all_cases, 
-                      'Train_r2':all_train_r2s, 
-                      'Val_r2':all_val_r2s,
-                      'Train_rmse':all_train_rmses,
-                      'Val_rmse':all_val_rmses
-                     }).to_csv(\
-                                'Tractability_Results/R2_summaries_varying_D.csv'
-                                                   )
-    
     
 
 if __name__=='__main__':
