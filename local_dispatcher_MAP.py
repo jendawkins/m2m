@@ -13,34 +13,44 @@ base_path = os.getcwd()
 parser = argparse.ArgumentParser()
 parser.add_argument("-case", "--case", help="case", type=str,
                     default=datetime.date.today().strftime('%m %d %Y').replace(' ', '-'))
-parser.add_argument("-max_load", "--max_load", help="max_load", type=int, default = 4)
+parser.add_argument("-max_load", "--max_load", help="max_load", type=int, default = 6)
 args = parser.parse_args()
 
 max_load = args.max_load
 
 param_dict = {
-    # ('L', 'K', 'N_bug','N_met','N_samples','xdim','ydim'):
-    #               [
-    #                (2,2,40,40,int(100 + 0.2*100),2,2),
-    #                # (2,2,60,40,int(100 + 0.2*100),2,2),
-    #                # (3,3,200,800,int(100 + 0.2*100),2,2),
-    #                # (10,10,200,800,int(100 + 0.2*100),2,2),
-    #                # (10,10,200,800,int(200 + 0.2*200),2,2),
-    #                # (10,10,200,800,int(200+ 0.2*200),5,5),
-    #                # (10,10,200,800,int(200+ 0.2*200),10,10),
-    #                # (10,10,500,500,int(200+ 0.2*200),5,5)
-    #               ],
-              # 'seed': np.arange(0,10),
-              'L': [10], 'K': [10], 'xdim': [20], 'ydim': [20],
-              'seed': [0,1,2,3],
-              'iter': 20000,
+    ('L', 'K', 'N_bug','N_met','N_samples','xdim','ydim'):
+                  [
+                   (2,2,40,40,int(100 + 0.2*100),2,2),
+                      # (2,2,40,40,int(100 + 0.2*100),5,5),
+                      #   (2,2,100,300,int(100 + 0.2*100),5,5),
+                      #   (2,2,100,300,int(200 + 0.2*100),5,5),
+                      #       (10,10,100,300,int(200 + 0.2*100),5,5),
+                      #           (10,10,100,300,int(200 + 0.2*100),10,10),
+                   # (2,2,60,40,int(100 + 0.2*100),2,2),
+                   # (3,3,200,800,int(100 + 0.2*100),2,2),
+                   # (10,10,200,800,int(100 + 0.2*100),2,2),
+                   # (10,10,200,800,int(200 + 0.2*200),2,2),
+                   # (10,10,200,800,int(200+ 0.2*200),5,5),
+                   # (10,10,200,800,int(200+ 0.2*200),10,10),
+                   # (10,10,500,500,int(200+ 0.2*200),5,5)
+                  ],
+                'seed': [0],
+              # 'seed': np.arange(0,5),
+              # 'L': [10], 'K': [10], 'xdim': [10], 'ydim': [10],
+              # 'seed': [0,1,2],
+              'iter': 30000,
               'lr': [0.001], 'meas_var': 0.10,
-              'data': 'cdi',
-              'linear': 0, 'nltype': '', 'w_tau': [(-0.1, -1.5)],
+              # 'data': 'cdi',
+    'data': 'synthetic',
+    ('linear', 'nltype'): [(0, 'linear')],
+    # 'nltype': '',
+    # 'nltype': ['poly', 'linear'],
+    'w_tau': [(-0.1, -1.5)],
               'a_tau': [(-0.1, -2.5)],
-              'adjust_lr': [1],
-              'lm': [1], 'lb': [1],
-              'locs': ['true'], 'early_stopping': [0],
+              'adjust_lr': [1], ('lm', 'lb'): [(0,0),(1,1)],
+              # 'lm': [1], 'lb': [1],
+              'locs': ['true'], 'early_stopping': [1],
               # 'case': 'new_data_gen'
               }
 
@@ -89,6 +99,6 @@ for p in zipped_params:
     outter_i += 1
     pid = subprocess.Popen(args2, cwd = base_path)
     pid_list.append(pid)
-    time.sleep(0.5)
+    time.sleep(2)
     while sum([x.poll() is None for x in pid_list]) >= max_load:
         time.sleep(1)

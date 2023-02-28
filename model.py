@@ -133,12 +133,16 @@ class Model(nn.Module):
         # Otherwise, set to input L and K
         self.L, self.K = L, K
         if self.learn_num_met_clusters:
+            self.K = 2*self.K
             if self.met_class is not None:
                 self.K = len(np.unique(self.met_class.values))
         if self.learn_num_bug_clusters:
+            self.L = 2*self.L
             if self.bug_class is not None:
                 self.L = len(np.unique(self.bug_class.values))
 
+        print('Total number of available bug clusters: {0}'.format(self.L))
+        print('Total number of available metabolite clusters: {0}'.format(self.K))
 
         # Set the prior distributions parameters for each model parameter (to be called in MAP_loss.py when we find the
         # loss of each parameter according to its prior)
@@ -152,7 +156,7 @@ class Model(nn.Module):
         if not self.linear:
             self.nam = NAM(self.L, self.K, p_nn = self.p_nn)
             self.distributions['NAM'] = Normal(0, 1000)
-        self.batch_norm = nn.BatchNorm1d(self.L)
+        # self.batch_norm = nn.BatchNorm1d(self.L)
 
 
         # If we have metabolite locations, we set a prior distribution for r_met and mu_met
@@ -168,7 +172,8 @@ class Model(nn.Module):
                 loc = np.median(radii)
 
             # Otheriwse, we set r_met to be the size of the embedding space divided by K
-                scale = np.var(radii)
+                scale = (1/self.K)*loc
+                # scale = np.var(radii)
             else:
                 scale = np.sum((np.max(self.met_locs,0) - np.min(self.met_locs,0))**2)
                 loc = scale / self.K
@@ -177,7 +182,10 @@ class Model(nn.Module):
             # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
             mu = np.log(loc)
             var = scale
-            self.distributions['r_met'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+            self.distributions['r_met'] = Normal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+            # self.distributions['r_met'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+            
+            
             # self.distributions['r_met'] = HalfNormal(torch.tensor(10.0))
 
             # We define the prior for mu_met to be a multivariate normal with mean 0 and variance 100 (since the input
@@ -187,6 +195,8 @@ class Model(nn.Module):
                                                                   self.met_embedding_dim))
 
         # If we have input microbial locations, we do the same procedure as for input metabolic locations described above
+
+        # To set stdev of r_met, should be multiplier of mean of distribution
         if self.microbe_locs is not None:
             if self.bug_class is not None:
                 radii = []
@@ -195,7 +205,8 @@ class Model(nn.Module):
                     locs = self.microbe_locs[ixs,:]
                     radii.extend(pdist(locs))
                 loc = np.mean(radii)
-                scale = np.var(radii)
+                scale = (1/self.L)*loc
+                # scale = np.var(radii)
             else:
                 scale = np.sum((np.max(self.microbe_locs,0) - np.min(self.microbe_locs,0))**2)
                 loc = scale / self.L
@@ -203,14 +214,14 @@ class Model(nn.Module):
             # NEW: variance is set to the log of the variance of the radii (or the scale based on the locations) rather than set to 1
             mu = np.log(loc)
             var = scale
-            self.distributions['r_bug'] = LogNormal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
+            self.distributions['r_bug'] = Normal(torch.tensor(mu), scale = torch.sqrt(torch.tensor(var)))
 
             # self.distributions['r_bug'] = HalfNormal(torch.tensor(10.0))
             self.distributions['mu_bug'] = MultivariateNormal(torch.zeros(self.bug_embedding_dim),
                                                               1e4*torch.eye(self.bug_embedding_dim))
 
 
-        # beta is parameterized by a normal dist with mean=0, var = 1000
+        # beta is parameterized by a normal dist with mean=0, var = 10000
         self.distributions['beta'] = Normal(0, np.sqrt(1e4))
 
         # alpha is parameterized by a binary concrete with loc=1/(K*L) (defined above) and self.alpha_temp, which
@@ -227,7 +238,8 @@ class Model(nn.Module):
 
         # pi_met is set to a dirichlet prior with epsilon = 1/K; if we learn the number of metabolite clusters,
         # we use epsilon=e_met instead of epsilon=1/K
-        self.distributions['pi_met'] = Dirichlet(torch.Tensor([1/self.K]*self.K))
+        # We set pi_met below because its based on e_met
+
 
     def train_NAM_for_init(self, x, y, iterations=1000, lr=0.1):
         """
@@ -320,6 +332,7 @@ class Model(nn.Module):
             z = Categorical(self.pi_met).sample([self.N_met])
             self.z_act = torch.Tensor(get_one_hot(z, l = self.K))
 
+        self.distributions['pi_met'] = Dirichlet(self.e_met)
         # Get microbial cluster inputs and metabolic cluster outputs for lasso regression to initialize biases and alphas
         temp = x.detach()@self.w_act.float()
         eps = get_epsilon(temp)
@@ -348,7 +361,7 @@ class Model(nn.Module):
             self.nam.load_state_dict(deepcopy(init_state_dict))
 
 
-    def forward(self, x, y):
+    def forward(self, x):
         # Forward function, contains all the model equations and calls MAP_loss.py to calculate loss
         # Omega and alpha epsilon are to keep w and alpha from getting to close to 0 or 1 and causing numerical issues
         omega_epsilon = self.omega_temp / 10
@@ -365,7 +378,11 @@ class Model(nn.Module):
 
         # log-transform g with set epsilon
         g = torch.log(g + 0.001)
-        bn = (g - torch.mean(g, 0)) / (torch.std(g, 0) + 1e-5)
+
+        if g.shape[0] > 1:
+            bn = (g - torch.mean(g, 0)) / (torch.std(g, 0) + 1e-5)
+        else:
+            bn = g
         # bn = self.batch_norm(g)
         self.alpha_act = (1-2*alpha_epsilon)*torch.sigmoid(self.alpha/self.alpha_temp) + alpha_epsilon
 
@@ -377,5 +394,6 @@ class Model(nn.Module):
         if torch.isnan(out_clusters).any() or torch.isinf(out_clusters).any():
             print('debug')
         # compute loss via the priors
-        loss = self.MAPloss.compute_loss(out_clusters,y)
-        return out_clusters, loss
+        # loss = self.MAPloss.compute_loss(out_clusters,y)
+        # return out_clusters, loss
+        return out_clusters

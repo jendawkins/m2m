@@ -144,6 +144,7 @@ class MAPloss():
         # be greater than 0)
         val = torch.exp(self.net.r_bug)
         self.loss_dict['r_bug'] = -self.net.distributions['r_bug'].log_prob(val).sum()
+        # self.loss_dict['r_bug'] = -self.net.distributions['r_bug'].log_prob(self.net.r_bug).sum()
 
     def mu_met_loss(self):
         # Loss for mu_met, same as loss for mu_bug
@@ -152,8 +153,8 @@ class MAPloss():
 
     def r_met_loss(self):
         # Computes loss for r_met, same as loss for r_bug
-        val = torch.exp(self.net.r_met)
-        self.loss_dict['r_met'] = -self.net.distributions['r_met'].log_prob(val).sum()
+        # val = torch.exp(self.net.r_met)
+        self.loss_dict['r_met'] = -self.net.distributions['r_met'].log_prob(self.net.r_met).sum()
 
     def pi_met_loss(self):
         # Computes loss for pi_met

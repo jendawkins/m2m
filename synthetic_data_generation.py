@@ -91,7 +91,7 @@ def generate_synthetic_data(N_met = 10, N_bug = 14, N_samples = 200, N_met_clust
             if nl_type == 'exp':
                 y[:, j] = np.random.normal(beta[0, k] + np.exp(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'sigmoid':
-                y[:, j] = np.random.normal(beta[0, k] + sigmoid(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
+                y[:, j] = np.random.normal(beta[0, k] + sigmoid(10*g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'sin':
                 y[:, j] = np.random.normal(beta[0, k] + np.sin(g_temp) @ (beta[1:, k] * alpha[:, k]), np.sqrt(measurement_var))
             if nl_type == 'poly':
@@ -134,8 +134,9 @@ if __name__ == "__main__":
     #               r_bug, mu_met, r_met, gen_w, gen_alpha, gen_beta)
 
     # for nuisance in [4,6,8,10,15,20]:
-    for meas_var in [0.01, 0.05, 0.1, 0.5, 1]:
-        for nl_type in ['linear', 'poly', 'exp', 'sigmoid']:
+    # meas_var = 0.1
+    for meas_var in [0.01]:
+        for nl_type in ['sigmoid']:
             x, y, g, gen_beta, gen_alpha, gen_w, gen_z, gen_bug_locs, gen_met_locs, mu_bug, \
             mu_met, r_bug, r_met = generate_synthetic_data(N_met=N_met, N_bug=N_bug, N_met_clusters=K,
                                                                   N_bug_clusters=L, measurement_var=meas_var,

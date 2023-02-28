@@ -44,7 +44,7 @@ class BinaryConcrete():
                 x = torch.Tensor(x)
             except:
                 x = torch.Tensor([x])
-        return torch.log(self.tau) + torch.log(self.loc) + (self.tau - 1)*torch.log(x) + \
+        return torch.log(self.tau) + torch.log(self.loc) + (-self.tau - 1)*torch.log(x) + \
                (-self.tau - 1)*torch.log(1-x) - 2*torch.log(self.loc*(x.pow(-self.tau)) + (1-x).pow(-self.tau))
 
 

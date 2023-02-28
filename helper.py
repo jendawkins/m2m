@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import sklearn
 from copy import copy, deepcopy
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, LeaveOneOut, train_test_split
 import os
 import scipy.stats as st
 from collections import defaultdict
@@ -362,6 +362,27 @@ def get_meas_var(raw_data, repeat_data):
     pooled_var = pooled_numerator / pooled_denomenator
     return pooled_var
 
+def cv_kfold_splits(X, y, num_splits=5, seed=42):
+    skf = StratifiedKFold(n_splits=num_splits, shuffle=True, random_state=seed)
+
+    train_ids = list()
+    test_ids = list()
+    for train_index, test_index in skf.split(X, y):
+        train_ids.append(train_index)
+        test_ids.append(test_index)
+
+    return train_ids, test_ids
+
+def cv_loo_splits(X, y):
+    skf = LeaveOneOut()
+
+    train_ids = list()
+    test_ids = list()
+    for train_index, test_index in skf.split(X, y):
+        train_ids.append(train_index)
+        test_ids.append(test_index)
+
+    return train_ids, test_ids
 
 def load_data(xfile, yfile, dataLoader,data_path, out_path):
     """

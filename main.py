@@ -50,6 +50,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
     if x is not None and y is not None:
         metabs = y.columns.values
         seqs = x.columns.values
+        data_ixs = x.index.values
         args.learn = 'all'
         # set path for saving results
     else:
@@ -217,36 +218,42 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
             asv_ix = seqs[asv_ix]
         if not isinstance(asv_ix[0], str):
             asv_ix = [str(a) for a in asv_ix]
-        if args.data == 'cdi':
-            plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
-                          out_path= path + '/init_clusters/', data_path=base_path + '/inputs/' + args.data + '/',
-                          taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree_init.pdf')
+        # if args.data == 'cdi':
+        #     plot_asv_tree(newick_path=base_path + '/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+        #                   out_path= path + '/init_clusters/', data_path=base_path + '/inputs/' + args.data + '/',
+        #                   taxa_keep=asv_ix, name = 'ASV_cluster_' + str(asv_clust) + '_tree_init.pdf')
     for met_clust in active_met_clust:
         met_ix = np.where(best_z[:, met_clust] != 0)[0]
         if metabs is not None:
             met_ix = metabs[met_ix]
         if not isinstance(met_ix[0], str):
             met_ix = [str(a) for a in met_ix]
-        if args.data == 'cdi':
-            plot_metab_tree(mets_keep = met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
-                            out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
+        # if args.data == 'cdi':
+            # plot_metab_tree(mets_keep = met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
+            #                 out_path=path + '/init_clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree_init.pdf')
 
     # If embedding dimension = 2 and we have embedded locations input, plot output locations
     if a_met is not None:
-        plot_output_locations(path + 'init_clusters_', net, 0, param_dict, args.seed, plot_zeros=1)
+        plot_output_locations(path + 'init_clusters', net, 0, param_dict, args.seed, plot_zeros=1)
 
 
     # Adjust each parameter's learning rate based on parameter size
-    lr_dict = {}
+    lr_dict = {'mu_bug': 0.01, 'r_bug': 0.005, 'r_met': 0.005, 'mu_met': 0.005, 'pi_met': 0.001,
+               'e_met': 0.001, 'beta': 0.005, 'alpha': 0.002}
     lr_list = []
     size_beta = torch.mean(torch.abs(net.beta.detach().flatten()))
     for name, parameter in net.named_parameters():
         size = torch.mean(torch.abs(parameter.detach().flatten()))
         if args.adjust_lr:
             lr_list.append({'params': parameter, 'lr': (args.lr / size_beta) * size})
+            lr_dict[name] = [(args.lr / size_beta) * size]
         else:
-            lr_list.append({'params': parameter})
-        lr_dict[name] = [(args.lr / size_beta) * size]
+            if name in lr_dict.keys():
+                lr_list.append({'params': parameter, 'lr': lr_dict[name]})
+            else:
+                lr_list.append({'params': parameter})
+
+            lr_dict = {k: [v] for k, v in lr_dict.items()}
 
     # initialize optimizer with learning rates
     optimizer = optim.RMSprop(lr_list, lr=args.lr)
@@ -383,9 +390,9 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                     met_df['Cluster ' + str(met_clust)] = met_ix
                     if not isinstance(met_ix[0], str):
                         met_ix = [str(a) for a in met_ix]
-                    if args.data == 'cdi':
-                        plot_metab_tree(mets_keep=met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
-                                        out_path= cur_path+ '-clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree.pdf')
+                    # if args.data == 'cdi':
+                    #     plot_metab_tree(mets_keep=met_ix, newick_path=base_path + '/ete_tree/' + args.met_newick_name,
+                    #                     out_path= cur_path+ '-clusters/', name = 'Met_cluster_' + str(met_clust) + '_tree.pdf')
 
                 temp = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in met_df.items()]))
                 temp.to_csv(cur_path +'mets_in_clusters.csv')
@@ -401,22 +408,23 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 with open(cur_path + 'Loss.txt', 'a') as f:
                     f.writelines('Seed ' + str(args.seed) + ', Lowest Loss: ' + str(np.min(loss_vec))+ '\n')
 
-            net.eval()
-            val_cluster_outputs, val_loss = net(x_val, y_val)
-            # val_out_vec.append(val_cluster_outputs.detach().numpy())
-            # val_loss_vec.append(val_loss.detach().numpy())
-            net.train()
+            if args.data == 'synthetic':
+                net.eval()
+                val_cluster_outputs, val_loss = net(x_val, y_val)
+                # val_out_vec.append(val_cluster_outputs.detach().numpy())
+                # val_loss_vec.append(val_loss.detach().numpy())
+                net.train()
+            #
+                pred_clusters = val_cluster_outputs
+                preds = torch.matmul(pred_clusters + args.meas_var * torch.randn(pred_clusters.shape), torch.Tensor(best_z).T)
+                pd.DataFrame(preds.detach().numpy()).to_csv(path_orig + '/' + 'val_predictions.csv', header=False, index=False)
 
-            pred_clusters = val_cluster_outputs
-            preds = torch.matmul(pred_clusters + args.meas_var * torch.randn(pred_clusters.shape), torch.Tensor(best_z).T)
-            pd.DataFrame(preds.detach().numpy()).to_csv(path_orig + '/' + 'val_predictions.csv', header=False, index=True)
-
-            if not os.path.isfile(cur_path + 'ValLoss.txt'):
-                with open(cur_path + 'ValLoss.txt', 'w') as f:
-                    f.writelines('Seed ' + str(args.seed) + ', Current Val Loss: ' + str(val_loss.detach().item()) + '\n')
-            else:
-                with open(cur_path + 'Loss.txt', 'a') as f:
-                    f.writelines('Seed ' + str(args.seed) + ', Current Val Loss: ' + str(val_loss.detach().item())+ '\n')
+                if not os.path.isfile(cur_path + 'ValLoss.txt'):
+                    with open(cur_path + 'ValLoss.txt', 'w') as f:
+                        f.writelines('Seed ' + str(args.seed) + ', Current Val Loss: ' + str(val_loss.detach().item()) + '\n')
+                else:
+                    with open(cur_path + 'ValLoss.txt', 'a') as f:
+                        f.writelines('Seed ' + str(args.seed) + ', Current Val Loss: ' + str(val_loss.detach().item())+ '\n')
 
             # Plot the loss per learned parameter
             plot_loss_dict(cur_path, args.seed, loss_dict_vec)
@@ -427,7 +435,7 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
 
             # Plot parameter traces
             if plot_params:
-                plot_param_traces(cur_path, param_dict, true_vals, args.seed)
+                plot_param_traces(cur_path, param_dict, true_vals)
 
             # plot loss
             plot_loss(args.seed, loss_vec)
@@ -473,13 +481,20 @@ def run_learner(args, device, x=None, y=None, a_met=None, a_bug = None, base_pat
                 pd.DataFrame(param_dict[key][best_train_mod]).to_csv(path_orig + '/' + key + '.csv',
                                                      header=False, index=False)
 
-            x_tr, y_tr = pd.DataFrame(x.detach().numpy(), index = tr_ids), pd.DataFrame(y.detach().numpy(), index = tr_ids)
-            x_tr.to_csv(path_orig+ '/' + 'training_data.csv', header=False, index=True)
-            y_tr.to_csv(path_orig + '/' + 'training_labels.csv', header=False, index=True)
-
-            x_val, y_val = pd.DataFrame(x_val.detach().numpy(), index = val_ids), pd.DataFrame(y_val.detach().numpy(), index = val_ids)
-            x_val.to_csv(path_orig +  '/' + 'training_data.csv', header=False, index=True)
-            y_val.to_csv(path_orig  + '/' + 'training_labels.csv', header=False, index=True)
+            if args.data == 'synthetic':
+                x_tr, y_tr = pd.DataFrame(x.detach().numpy(), index = tr_ids), pd.DataFrame(y.detach().numpy(), index = tr_ids)
+                x_tr.to_csv(path_orig+ '/' + 'training_data.csv', header=False, index=True)
+                y_tr.to_csv(path_orig + '/' + 'training_labels.csv', header=False, index=True)
+            #
+            #     x_val, y_val = pd.DataFrame(x_val.detach().numpy(), index = val_ids), pd.DataFrame(y_val.detach().numpy(), index = val_ids)
+            #     x_val.to_csv(path_orig +  '/' + 'training_data.csv', header=False, index=True)
+            #     y_val.to_csv(path_orig  + '/' + 'training_labels.csv', header=False, index=True)
+            #
+            else:
+                x_tr, y_tr = pd.DataFrame(x.detach().numpy(), index = data_ixs, columns=seqs), \
+                             pd.DataFrame(y.detach().numpy(), index = data_ixs, columns=metabs)
+                x_tr.to_csv(path_orig+ '/' + 'training_data.csv', index=True)
+                y_tr.to_csv(path_orig + '/' + 'training_labels.csv', index=True)
 
             best_z = param_dict['z'][best_train_mod]
             pred_clusters = train_out_vec[best_train_mod]
@@ -521,20 +536,20 @@ if __name__ == "__main__":
     parser.add_argument("-fix", "--fix", help="params to fix", type=str, nargs='+', default = [])
     parser.add_argument("-case", "--case", help="case", type=str,
                         default = datetime.date.today().strftime('%m %d %Y').replace(' ','-'))
-    parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 50)
-    parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 30)
-    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 10)
-    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 10)
+    parser.add_argument("-N_met", "--N_met", help="N_met", type=int, default = 40)
+    parser.add_argument("-N_bug", "--N_bug", help="N_bug", type=int, default = 40)
+    parser.add_argument("-L", "--L", help="number of microbe rules", type=int, default = 2)
+    parser.add_argument("-K", "--K", help="metab clusters", type=int, default = 2)
     parser.add_argument("-L_true", "--L_true", help="true number of microbe clusters "
                                                     "(for synthetic data generation)", type=int, default = 0)
     parser.add_argument("-K_true", "--K_true", help="true number of metab clusters "
                                                     "(for synthetic data generation)", type=int, default = 0)
     parser.add_argument("-meas_var", "--meas_var", help="measurment variance", type=float, default = 0.1)
     parser.add_argument("-iterations", "--iterations", help="number of iterations", type=int,default = 100)
-    parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 99)
+    parser.add_argument("-seed", "--seed", help = "seed for random start", type = int, default = 0)
     parser.add_argument("-lb", "--lb", help = "whether or not to learn bug clusters", type = int, default = 1)
     parser.add_argument("-lm", "--lm", help = "whether or not to learn metab clusters", type = int, default = 1)
-    parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=1000)
+    parser.add_argument("-N_samples", "--N_samples", help="num of samples", type=int, default=240)
     parser.add_argument("-linear", "--linear", type = int, default = 0, help = 'whether to run linear model or not')
     parser.add_argument("-nltype", "--nltype", type = str, default = "poly",
                         help = 'if using synthetic data and linear == 0, how to non-linearly generate data'
@@ -544,8 +559,8 @@ if __name__ == "__main__":
     parser.add_argument("-p_num", "--p_num", type=int, default=1,
                         help = "if non-linear, how many neural networks per microbe cluster - metabolite cluster interaction"
                                "(i.e. p=1 means 1 NN per each interaction)")
-    parser.add_argument("-xdim", "--xdim", type=int, default=2, help = 'embedding dimension for microbes')
-    parser.add_argument("-ydim", "--ydim", type=int, default=2, help = 'embedding dimension for metabolites')
+    parser.add_argument("-xdim", "--xdim", type=int, default=10, help = 'embedding dimension for microbes')
+    parser.add_argument("-ydim", "--ydim", type=int, default=10, help = 'embedding dimension for metabolites')
     parser.add_argument("-a_tau", "--a_tau", type=float, nargs = '+', default=[-0.1, -2.5], help = 'annealing for alpha temparature')
     parser.add_argument("-w_tau", "--w_tau", type=float, nargs='+', default=[-0.1, -1.5], help = 'anealing for omega temperature')
     parser.add_argument("-locs","--locs", type = str, default = 'true',
@@ -561,11 +576,11 @@ if __name__ == "__main__":
                                                                                     'options are: polar, lipids-neg, or lipids-pos')
 
     # Filtering criteria if args.data == 'cdi' or args.data == 'safari'
-    parser.add_argument("-nzm", "--non_zero_perc_met", type=float, default=80,
+    parser.add_argument("-nzm", "--non_zero_perc_met", type=float, default=25,
                         help='percent of participants with non-zero metabolites in filtered data')
-    parser.add_argument("-nzb", "--non_zero_perc_bug", type=float, default=15,
+    parser.add_argument("-nzb", "--non_zero_perc_bug", type=float, default=10,
                         help='percent of participants with non-zero microbes in filtered data')
-    parser.add_argument("-cvm", "--coef_var_perc_met", type=float, default=5,
+    parser.add_argument("-cvm", "--coef_var_perc_met", type=float, default=50,
                         help='coefficient of variation percentile for metabolites')
     parser.add_argument("-cvb", "--coef_var_perc_bug", type=float, default=0,
                         help='coefficient of variation percentile for microbes')
@@ -576,6 +591,7 @@ if __name__ == "__main__":
     parser.add_argument("-early_stopping", "--early_stopping", default = None,
                         help = 'whether to stop training early')
 
+    parser.add_argument("-validate", "--validate", type=int,default =0)
 
     args = parser.parse_args()
     print(sys.executable)
@@ -585,14 +601,14 @@ if __name__ == "__main__":
     if args.K_true == 0:
         args.K_true = args.K
 
-    if args.L_true < args.L:
-        args.lb = 1
-    else:
-        args.lb = 0
-    if args.K_true < args.K:
-        args.lm = 1
-    else:
-        args.lb = 0
+    # if args.L_true < args.L:
+    #     args.lb = 1
+    # else:
+    #     args.lb = 0
+    # if args.K_true < args.K:
+    #     args.lm = 1
+    # else:
+    #     args.lb = 0
 
     args.case = args.data + '_' + args.locs + '_' + args.case
     dtype = args.dtype
@@ -640,8 +656,8 @@ if __name__ == "__main__":
         args.met_newick_name = 'newick_' + yfile.split('.csv')[0] + '.nhx'
 
         # Option to change filtering criteria
-        if xfile not in os.listdir(base_path + "/inputs/processed/") or yfile not in os.listdir(base_path + "/inputs/processed/"):
-            load_data(xfile, yfile, dataLoader,data_path=base_path +args.raw_data_path, out_path = base_path + "/inputs/processed/", )
+        # if xfile not in os.listdir(base_path + "/inputs/processed/") or yfile not in os.listdir(base_path + "/inputs/processed/"):
+        load_data(xfile, yfile, dataLoader,data_path=base_path +args.raw_data_path, out_path = base_path + "/inputs/processed/", )
 
         # set data_path to point to directory with processed data
         data_path = base_path + "/inputs/processed/"
@@ -659,16 +675,16 @@ if __name__ == "__main__":
 
         print(x.shape)
         print(y.shape)
-        plot_asv_tree(newick_path=base_path +'/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
-                      out_path=base_path + '/outputs/' + args.case, data_path = base_path + '/' + args.raw_data_path,
-                      name = 'init_phylo_tree.pdf', taxa_keep = x.columns.values)
+        # plot_asv_tree(newick_path=base_path +'/ete_tree/phylo_placement/output/newick_tree_query_reads.nhx',
+        #               out_path=base_path + '/outputs/' + args.case, data_path = base_path + '/' + args.raw_data_path,
+        #               name = 'init_phylo_tree.pdf', taxa_keep = x.columns.values)
 
-        try:
-            plot_orig_metab_tree(out_path = base_path + '/outputs/' + args.case, name = 'init_metab_tree.pdf',
-                                 data_path = base_path + '/' + args.raw_data_path, newick_path = base_path +'/ete_tree/' + args.met_newick_name,
-                                 dist_type = dtype, in_mets = y.columns.values)
-        except:
-            print('cant plot metab tree')
+        # try:
+        #     plot_orig_metab_tree(out_path = base_path + '/outputs/' + args.case, name = 'init_metab_tree.pdf',
+        #                          data_path = base_path + '/' + args.raw_data_path, newick_path = base_path +'/ete_tree/' + args.met_newick_name,
+        #                          dist_type = dtype, in_mets = y.columns.values)
+        # except:
+        #     print('cant plot metab tree')
 
 
         if args.locs == 'true':

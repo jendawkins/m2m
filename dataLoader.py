@@ -260,14 +260,11 @@ class dataLoader():
 
 if __name__ == "__main__":
     base_path = '/Users/jendawk/Dropbox (MIT)/M2M'
-    ml = metabLoader(non_zero_perc=25, meas_thresh=0, var_perc=50, week=1)
-
     dl = dataLoader(pt_perc={'metabs': .25, '16s': .1, 'scfa': 0, 'toxin':0}, meas_thresh=
     {'metabs': 0, '16s': 10, 'scfa': 0, 'toxin':0}, var_perc={'metabs': 50, '16s': 5, 'scfa': 0, 'toxin':0})
-    # dl = dataLoader(path=base_path + '/inputs/', pt_perc={'metabs': .25, '16s': .1, 'scfa': 0, 'toxin': 0}, meas_thresh=
-    # {'metabs': 0, '16s': 10, 'scfa': 0, 'toxin': 0},
-    #                 var_perc={'metabs': 50, '16s': 5, 'scfa': 0, 'toxin': 0}, pt_tmpts=1)
-    y1 = dl.week_sm['metabs'][1]['x']
-
-    y2 = ml.data['x']
+    x = dl.week['metabs'][1]['x']
+    print(x.shape)
+    x2 = dl.week_sm['metabs'][1]['x']
+    print(x2.shape)
+    print('')
     # assert(y2 == y1)
